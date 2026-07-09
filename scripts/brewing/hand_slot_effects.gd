@@ -1,0 +1,309 @@
+class_name HandSlotEffects
+extends RefCounted
+
+const HONEY_ID := IngredientEffects.HONEY_ID
+const COBBLER_ID := IngredientEffects.COBBLER_ID
+
+
+static func compute_entries(
+	hand_slots: Array,
+	hand_slot_count: int,
+	layout_slots: Array = [],
+	play_steps: Array = [],
+	owned_trinket_ids: Array = [],
+	unicorn_cured_slots: Array = [],
+	parrot_repeats_next: bool = false,
+	gecko_stayed_override: Dictionary = {},
+	honey_skipped_override: Dictionary = {},
+	locked_slots: Dictionary = {}
+) -> Array:
+	var per_slot: Array = []
+	for _i in hand_slot_count:
+		per_slot.append([])
+	_append_honey_entries_from_skipped_slots(per_slot, honey_skipped_override)
+	_append_gecko_assistant_entries_from_stayed_slots(per_slot, gecko_stayed_override)
+	_append_pocket_watch_entries_from_steps(per_slot, play_steps)
+	_append_unicorn_horn_entries(per_slot, unicorn_cured_slots)
+	_append_parrot_repeat_entries(per_slot, play_steps, parrot_repeats_next)
+	_append_pristine_feather_entries(per_slot, hand_slots, owned_trinket_ids)
+	_append_cobbler_entries_from_steps(
+		per_slot,
+		play_steps,
+		hand_slots,
+		layout_slots,
+		locked_slots
+	)
+	return per_slot
+
+
+static func compute_hand_play_locks(
+	hand_slots: Array,
+	hand_slot_count: int,
+	cauldron_count_before_hand: int,
+	owned_trinket_ids: Array
+) -> Dictionary:
+	var honey_skipped := compute_honey_skipped_slots(hand_slots, hand_slot_count)
+	var gecko_stayed := compute_gecko_stay_slots(
+		hand_slots,
+		hand_slot_count,
+		honey_skipped,
+		cauldron_count_before_hand,
+		owned_trinket_ids
+	)
+	var locked := honey_skipped.duplicate()
+	for slot_index in gecko_stayed.keys():
+		locked[slot_index] = true
+	return {
+		"honey_skipped": honey_skipped,
+		"gecko_stayed": gecko_stayed,
+		"locked": locked,
+	}
+
+
+static func compute_honey_skipped_slots(
+	slots: Array,
+	hand_slot_count: int
+) -> Dictionary:
+	var skipped := {}
+	for slot_index in range(1, hand_slot_count):
+		if slot_index >= slots.size():
+			continue
+		var ingredient: IngredientData = slots[slot_index]
+		if ingredient == null or ingredient.id != HONEY_ID:
+			continue
+		var left_ingredient: IngredientData = slots[slot_index - 1]
+		if left_ingredient != null:
+			skipped[slot_index - 1] = true
+	return skipped
+
+
+static func compute_gecko_stay_slots(
+	hand_slots: Array,
+	hand_slot_count: int,
+	honey_skipped_slots: Dictionary,
+	cauldron_count_before_hand: int,
+	owned_trinket_ids: Array
+) -> Dictionary:
+	var stayed := {}
+	if not TrinketEffects.has_gecko_assistant(owned_trinket_ids):
+		return stayed
+
+	var cauldron_count := cauldron_count_before_hand
+	var gecko_stays_consumed := 0
+	for slot_index in range(hand_slot_count):
+		if honey_skipped_slots.has(slot_index):
+			continue
+		if slot_index >= hand_slots.size() or hand_slots[slot_index] == null:
+			continue
+		var ingredient: IngredientData = hand_slots[slot_index]
+		if IngredientEffects.skips_hand_stay_interval_counter(ingredient):
+			continue
+		if TrinketEffects.gecko_assistant_stays_in_hand(
+			cauldron_count,
+			owned_trinket_ids,
+			gecko_stays_consumed
+		):
+			stayed[slot_index] = true
+			gecko_stays_consumed += 1
+		else:
+			cauldron_count += 1
+	return stayed
+
+
+static func _append_honey_entries_from_skipped_slots(
+	per_slot: Array,
+	honey_skipped: Dictionary
+) -> void:
+	for slot_key in honey_skipped.keys():
+		var slot_index := int(slot_key)
+		if slot_index < 0 or slot_index >= per_slot.size():
+			continue
+		per_slot[slot_index].append(
+			{
+				"ingredient_id": HONEY_ID,
+				"overlay_text": "",
+			}
+		)
+
+
+static func _append_pocket_watch_entries_from_steps(
+	per_slot: Array,
+	play_steps: Array
+) -> void:
+	for slot_index in HandPlayPreview.pocket_watch_slots(play_steps):
+		if slot_index >= 0 and slot_index < per_slot.size():
+			per_slot[slot_index].append(
+				{
+					"trinket_id": TrinketEffects.POCKET_WATCH_ID,
+					"overlay_text": "",
+				}
+			)
+
+
+static func _append_gecko_assistant_entries_from_stayed_slots(
+	per_slot: Array,
+	gecko_stayed: Dictionary
+) -> void:
+	for slot_key in gecko_stayed.keys():
+		var slot_index := int(slot_key)
+		if slot_index < 0 or slot_index >= per_slot.size():
+			continue
+		per_slot[slot_index].append(
+			{
+				"trinket_id": TrinketEffects.GECKO_ASSISTANT_ID,
+				"overlay_text": "",
+			}
+		)
+
+
+static func _append_gecko_assistant_entries_from_steps(
+	per_slot: Array,
+	play_steps: Array
+) -> void:
+	for step in play_steps:
+		if not bool(step.get("gecko_stays", false)):
+			continue
+		var slot_index := int(step.get("slot_index", -1))
+		if slot_index >= 0 and slot_index < per_slot.size():
+			per_slot[slot_index].append(
+				{
+					"trinket_id": TrinketEffects.GECKO_ASSISTANT_ID,
+					"overlay_text": "",
+				}
+			)
+
+
+static func _append_unicorn_horn_entries(
+	per_slot: Array,
+	unicorn_cured_slots: Array
+) -> void:
+	for slot_index in unicorn_cured_slots:
+		var cured_slot := int(slot_index)
+		if cured_slot < 0 or cured_slot >= per_slot.size():
+			continue
+		per_slot[cured_slot].append(
+			{
+				"ingredient_id": IngredientEffects.UNICORN_HORN_ID,
+				"overlay_text": "",
+			}
+		)
+
+
+static func _append_parrot_repeat_entries(
+	per_slot: Array,
+	play_steps: Array,
+	_parrot_repeats_next: bool = false
+) -> void:
+	# Prefer the explicit parrot_repeat flag from HandPlayPreview steps. Re-deriving
+	# "pending" while walking steps double-marked slots when the doubled card was
+	# itself a Parrot (first play re-armed pending, then the repeat step stamped again).
+	var marked_slots := {}
+	for step in play_steps:
+		if not bool(step.get("plays_to_cauldron", false)):
+			continue
+		if not bool(step.get("parrot_repeat", false)):
+			continue
+		var slot_index := int(step.get("slot_index", -1))
+		if slot_index < 0 or slot_index >= per_slot.size():
+			continue
+		if marked_slots.has(slot_index):
+			continue
+		marked_slots[slot_index] = true
+		per_slot[slot_index].append(
+			{
+				"ingredient_id": IngredientEffects.PARROT_ID,
+				"overlay_text": "",
+			}
+		)
+
+
+static func _append_cobbler_entries_from_steps(
+	per_slot: Array,
+	play_steps: Array,
+	hand_slots: Array,
+	layout_hand_slots: Array = [],
+	locked_slots: Dictionary = {}
+) -> void:
+	var layout := layout_hand_slots if not layout_hand_slots.is_empty() else hand_slots
+	var sim_cauldron: Array = []
+	var last_hand_slot := -1
+	var last_hand_ingredient: IngredientData = null
+	for step in play_steps:
+		if not bool(step.get("plays_to_cauldron", false)):
+			continue
+		var play_slot := int(step.get("slot_index", -1))
+		if play_slot < 0:
+			continue
+		var ingredient: IngredientData = step.get("ingredient")
+		if ingredient == null:
+			continue
+		if bool(step.get("bat_wing_pick", false)):
+			sim_cauldron.append(ingredient)
+			last_hand_slot = play_slot
+			last_hand_ingredient = ingredient
+			continue
+		var resolved := IngredientEffects.resolve_hand_play_cobbler(
+			ingredient,
+			sim_cauldron,
+			play_slot,
+			last_hand_slot,
+			layout,
+			last_hand_ingredient,
+			locked_slots,
+			play_slot
+		)
+		var target_slot := -1
+		var retroactive_slot := int(resolved.get("retroactive_slot", -1))
+		if retroactive_slot >= 0:
+			target_slot = retroactive_slot
+		elif bool(resolved.get("apply_to_current", false)):
+			target_slot = play_slot
+		elif bool(resolved.get("apply_retroactive_immediately", false)):
+			target_slot = play_slot
+		if target_slot >= 0:
+			var cobbler_bonus: Dictionary = resolved.get("bonus", {})
+			if (
+				int(cobbler_bonus.get("score", 0)) > 0
+				or int(cobbler_bonus.get("explosiveness", 0)) > 0
+			):
+				_append_cobbler_effect_entry(per_slot, target_slot)
+		sim_cauldron.append(ingredient)
+		last_hand_slot = play_slot
+		last_hand_ingredient = ingredient
+
+
+static func _append_cobbler_effect_entry(per_slot: Array, slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= per_slot.size():
+		return
+	for entry in per_slot[slot_index]:
+		if not entry is Dictionary:
+			continue
+		if str(entry.get("ingredient_id", "")) == COBBLER_ID:
+			return
+	per_slot[slot_index].append(
+		{
+			"ingredient_id": COBBLER_ID,
+			"overlay_text": "",
+		}
+	)
+
+
+static func _append_pristine_feather_entries(
+	per_slot: Array,
+	hand_slots: Array,
+	owned_trinket_ids: Array
+) -> void:
+	if not TrinketEffects.has_pristine_feather(owned_trinket_ids):
+		return
+	for slot_index in range(hand_slots.size()):
+		if slot_index >= per_slot.size():
+			continue
+		var ingredient: IngredientData = hand_slots[slot_index]
+		if not IngredientEffects.is_feather_ingredient(ingredient):
+			continue
+		per_slot[slot_index].append(
+			{
+				"trinket_id": TrinketEffects.PRISTINE_FEATHER_ID,
+				"overlay_text": "",
+			}
+		)

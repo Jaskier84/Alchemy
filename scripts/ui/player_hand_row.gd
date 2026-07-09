@@ -1,0 +1,869 @@
+class_name PlayerHandRow
+extends Control
+
+signal swap_requested(from_slot: int, to_slot: int)
+signal selection_changed(slot_index: int)
+
+const _CARD_SCENE := preload("res://scenes/ui/ingredient_card.tscn")
+const _ICON_SCENE := preload("res://scenes/ui/hand_slot_effect_icons.tscn")
+
+const HAND_SLOT_COUNT := 5
+const CARD_SCALE := 0.34
+const CARD_BASE_SIZE := Vector2(300.0, 420.0)
+const CARD_DISPLAY_SIZE := CARD_BASE_SIZE * CARD_SCALE
+const SLOT_OVERLAP := 118.0
+const DRAG_START_DISTANCE := 8.0
+const HOVER_Z_BOOST := 20
+const HAND_HOVER_RISE := 28.0
+const HAND_HOVER_SCALE := 1.12
+const HAND_HOVER_PAD_BOTTOM := 16.0
+const HAND_EFFECT_TOP_PAD := 0.0
+const MIDDLE_SLOT_INDEX := 2
+const PLAY_BUTTON_GAP := 12.0
+const RHYTHM_SHAKE_OFFSET := Vector2(5.0, 2.0)
+const RHYTHM_SHAKE_STEP := 0.07
+# Fixed design-space rect from player_hand_row.tscn. Export must keep this exact
+# placement; if the control expands to the full parent, cards sit at the top.
+const DESIGN_OFFSET_LEFT := 102.0
+const DESIGN_OFFSET_TOP := 360.0
+const DESIGN_OFFSET_RIGHT := 822.0
+const DESIGN_OFFSET_BOTTOM := 540.0
+const DESIGN_SIZE := Vector2(
+	DESIGN_OFFSET_RIGHT - DESIGN_OFFSET_LEFT,
+	DESIGN_OFFSET_BOTTOM - DESIGN_OFFSET_TOP
+)
+
+@onready var _slot_row: Control = $SlotRow
+@onready var _drag_layer: Control = $DragLayer
+@onready var _effect_icon_row: Control = $HandEffectIconRow
+
+var _slot_cards: Array[IngredientCard] = []
+var _slot_anchors: Array[Control] = []
+var _slot_effect_icons: Array[HandSlotEffectIcons] = []
+var _last_slot_effect_entries: Array = []
+var _dragging_card: IngredientCard = null
+var _drag_source_slot: int = -1
+var _drag_grab_offset: Vector2 = Vector2.ZERO
+var _interaction_enabled: bool = false
+var _swap_enabled: bool = false
+var _hover_slot: int = -1
+var _press_slot: int = -1
+var _press_position: Vector2 = Vector2.INF
+var _drag_started: bool = false
+var _selected_slot: int = -1
+var _suppressed_slots: Dictionary = {}
+var _anchor_rest_positions: Array[Vector2] = []
+var _rhythm_shake_slot_tweens: Dictionary = {}
+var _active_rhythm_shake_slots: Array = []
+
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clip_contents = false
+	if _slot_row != null:
+		_slot_row.clip_contents = false
+	if _effect_icon_row != null:
+		_effect_icon_row.clip_contents = false
+	_ensure_design_placement()
+	_build_slots()
+	if not resized.is_connected(_on_hand_resized):
+		resized.connect(_on_hand_resized)
+	set_process(false)
+	set_process_input(false)
+	call_deferred("_ensure_design_placement")
+
+
+func _ensure_design_placement() -> void:
+	# Keep top-left anchors + the scene's fixed offsets. Without this, export can
+	# leave the hand filling the brew panel so cards draw at the top of the screen.
+	var target_pos := Vector2(DESIGN_OFFSET_LEFT, DESIGN_OFFSET_TOP)
+	var needs_pin := (
+		not is_equal_approx(anchor_left, 0.0)
+		or not is_equal_approx(anchor_top, 0.0)
+		or not is_equal_approx(anchor_right, 0.0)
+		or not is_equal_approx(anchor_bottom, 0.0)
+		or not position.is_equal_approx(target_pos)
+		or not size.is_equal_approx(DESIGN_SIZE)
+	)
+	if not needs_pin:
+		return
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	anchor_left = 0.0
+	anchor_top = 0.0
+	anchor_right = 0.0
+	anchor_bottom = 0.0
+	custom_minimum_size = DESIGN_SIZE
+	offset_left = DESIGN_OFFSET_LEFT
+	offset_top = DESIGN_OFFSET_TOP
+	offset_right = DESIGN_OFFSET_RIGHT
+	offset_bottom = DESIGN_OFFSET_BOTTOM
+
+
+func _on_hand_resized() -> void:
+	_ensure_design_placement()
+	if not _slot_anchors.is_empty() and size.is_equal_approx(DESIGN_SIZE):
+		_layout_slots()
+
+
+func _build_slots() -> void:
+	_slot_cards.clear()
+	_slot_anchors.clear()
+	_slot_effect_icons.clear()
+	if _slot_row == null:
+		return
+
+	for child in _slot_row.get_children():
+		child.queue_free()
+	if _effect_icon_row != null:
+		for child in _effect_icon_row.get_children():
+			child.queue_free()
+
+	var total_width := CARD_DISPLAY_SIZE.x + SLOT_OVERLAP * float(HAND_SLOT_COUNT - 1)
+	var start_x := (size.x - total_width) * 0.5
+
+	for slot_index in HAND_SLOT_COUNT:
+		var anchor := Control.new()
+		anchor.name = "SlotAnchor%d" % (slot_index + 1)
+		anchor.custom_minimum_size = CARD_DISPLAY_SIZE
+		anchor.size = CARD_DISPLAY_SIZE
+		anchor.position = Vector2(
+			start_x + SLOT_OVERLAP * slot_index,
+			HAND_EFFECT_TOP_PAD
+		)
+		anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_slot_row.add_child(anchor)
+		_slot_anchors.append(anchor)
+
+		var card := _CARD_SCENE.instantiate() as IngredientCard
+		if card == null:
+			continue
+		card.name = "HandCard%d" % (slot_index + 1)
+		card.visible = false
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.set_external_icon_strip(true)
+		anchor.add_child(card)
+		_slot_cards.append(card)
+
+		if _effect_icon_row != null:
+			var icons := _ICON_SCENE.instantiate() as HandSlotEffectIcons
+			if icons != null:
+				icons.name = "SlotEffectIcons%d" % (slot_index + 1)
+				icons.visible = false
+				icons.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				icons.z_index = slot_index
+				_effect_icon_row.add_child(icons)
+				_slot_effect_icons.append(icons)
+			else:
+				_slot_effect_icons.append(null)
+
+
+func get_selected_slot() -> int:
+	return _selected_slot
+
+
+func cache_slot_effect_entries(slot_effect_entries: Array) -> void:
+	_last_slot_effect_entries = slot_effect_entries
+
+
+func get_slot_effect_icons(slot_index: int) -> HandSlotEffectIcons:
+	if slot_index < 0 or slot_index >= _slot_effect_icons.size():
+		return null
+	return _slot_effect_icons[slot_index]
+
+
+func get_current_hand_slots() -> Array:
+	var slots: Array = []
+	for _slot_index in HAND_SLOT_COUNT:
+		slots.append(null)
+	for slot_index in _slot_cards.size():
+		var card := _slot_cards[slot_index]
+		if card == null or not card.visible:
+			continue
+		slots[slot_index] = card.get_ingredient()
+	return slots
+
+
+func clear_selection() -> void:
+	_set_selected_slot(-1)
+
+
+func prepare_for_draw(persisted_slots: Array = []) -> void:
+	_ensure_design_placement()
+	_interaction_enabled = false
+	_suppressed_slots.clear()
+	_stop_all_rhythm_shakes()
+	_set_selected_slot(-1)
+	_cancel_drag()
+	_press_slot = -1
+	_press_position = Vector2.INF
+	for slot_index in HAND_SLOT_COUNT:
+		var card := _slot_cards[slot_index]
+		if card == null:
+			continue
+		var persisted_ingredient = null
+		if slot_index < persisted_slots.size():
+			persisted_ingredient = persisted_slots[slot_index]
+		if persisted_ingredient != null:
+			continue
+		card.visible = false
+		card.clear_hand_card()
+		_clear_slot_effect_icons(slot_index)
+	_update_hover_process()
+
+
+func get_play_button_global_position(button_size: Vector2) -> Vector2:
+	if MIDDLE_SLOT_INDEX < 0 or MIDDLE_SLOT_INDEX >= _slot_anchors.size():
+		return global_position
+	var anchor := _slot_anchors[MIDDLE_SLOT_INDEX]
+	if anchor == null:
+		return global_position
+	var anchor_rect := anchor.get_global_rect()
+	return Vector2(
+		anchor_rect.get_center().x - button_size.x * 0.5,
+		anchor_rect.position.y - PLAY_BUTTON_GAP - button_size.y
+	)
+
+
+func refresh_hand(
+	slots: Array,
+	interaction_enabled: bool,
+	swap_enabled: bool = true,
+	in_rhythm_shake_slots: Array = [],
+	hand_display_stats: Array = [],
+	slot_effect_entries: Array = []
+) -> void:
+	_ensure_design_placement()
+	_last_slot_effect_entries = slot_effect_entries
+	_interaction_enabled = interaction_enabled
+	_swap_enabled = swap_enabled and interaction_enabled
+	_cancel_drag()
+	var click_in_progress := (
+		Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and _press_slot >= 0
+	)
+	var saved_press_slot := _press_slot
+	var saved_press_position := _press_position
+	if not click_in_progress:
+		_press_slot = -1
+		_press_position = Vector2.INF
+	for slot_index in HAND_SLOT_COUNT:
+		var ingredient = slots[slot_index] if slot_index < slots.size() else null
+		var display_stats = (
+			hand_display_stats[slot_index]
+			if slot_index < hand_display_stats.size()
+			else null
+		)
+		var effect_entries = (
+			slot_effect_entries[slot_index]
+			if slot_index < slot_effect_entries.size()
+			else []
+		)
+		_bind_slot(slot_index, ingredient, display_stats, effect_entries)
+	if (
+		_selected_slot >= 0
+		and (
+			_selected_slot >= slots.size()
+			or slots[_selected_slot] == null
+		)
+	):
+		_set_selected_slot(-1)
+	else:
+		_apply_selection_visuals()
+	if click_in_progress:
+		_press_slot = saved_press_slot
+		_press_position = saved_press_position
+	_layout_slots()
+	_layout_all_effect_icons()
+	_update_hover_process()
+	set_in_rhythm_shake_slots(in_rhythm_shake_slots)
+	mouse_filter = (
+		Control.MOUSE_FILTER_STOP
+		if _interaction_enabled
+		else Control.MOUSE_FILTER_IGNORE
+	)
+
+
+func get_slot_global_center(slot_index: int) -> Vector2:
+	if slot_index < 0 or slot_index >= _slot_anchors.size():
+		return global_position
+	var anchor := _slot_anchors[slot_index]
+	if anchor == null:
+		return global_position
+	return anchor.get_global_rect().get_center()
+
+
+func get_slot_fly_data(slot_index: int) -> Dictionary:
+	if slot_index < 0 or slot_index >= _slot_cards.size():
+		return {}
+	var card := _slot_cards[slot_index]
+	if card == null or not card.visible:
+		return {"start_center": get_slot_global_center(slot_index)}
+	if card.has_method("capture_fly_data"):
+		var data := card.capture_fly_data()
+		if not data.is_empty():
+			return data
+	return {"start_center": get_slot_global_center(slot_index)}
+
+
+func hide_slot_for_fly(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _slot_cards.size():
+		return
+	var card := _slot_cards[slot_index]
+	if card != null:
+		card.visible = false
+	_clear_slot_effect_icons(slot_index)
+
+
+func suppress_slot(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= HAND_SLOT_COUNT:
+		return
+	_suppressed_slots[slot_index] = true
+	hide_slot_for_fly(slot_index)
+
+
+func is_slot_suppressed(slot_index: int) -> bool:
+	return _suppressed_slots.has(slot_index)
+
+
+func reveal_slot(
+	slot_index: int,
+	ingredient: IngredientData,
+	display_stats: Variant = null,
+	effect_entries: Array = []
+) -> void:
+	_suppressed_slots.erase(slot_index)
+	var resolved_effects: Array = effect_entries
+	if resolved_effects.is_empty():
+		resolved_effects = (
+			_last_slot_effect_entries[slot_index]
+			if slot_index < _last_slot_effect_entries.size()
+			else []
+		)
+	_bind_slot(slot_index, ingredient, display_stats, resolved_effects)
+	_layout_slot_effect_icon(slot_index)
+
+
+func _bind_slot(
+	slot_index: int,
+	ingredient: IngredientData,
+	display_stats: Variant = null,
+	effect_entries: Array = []
+) -> void:
+	if slot_index < 0 or slot_index >= _slot_cards.size():
+		return
+	var card := _slot_cards[slot_index]
+	if card == null:
+		return
+	if ingredient == null:
+		card.visible = false
+		card.clear_hand_card()
+		_clear_slot_effect_icons(slot_index)
+		return
+	card.set_external_icon_strip(true)
+	if display_stats is Dictionary:
+		card.bind_hand_card(
+			ingredient,
+			slot_index,
+			false,
+			int(display_stats.get("point_value", ingredient.point_value)),
+			int(display_stats.get("explosive_value", ingredient.explosive_value)),
+			effect_entries
+		)
+	else:
+		card.bind_hand_card(ingredient, slot_index, false, -1, -1, effect_entries)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.visible = not _suppressed_slots.has(slot_index)
+	_bind_slot_effect_icons(slot_index, effect_entries)
+	_apply_slot_z_index(slot_index)
+
+
+func _bind_slot_effect_icons(slot_index: int, effect_entries: Array) -> void:
+	if slot_index < 0 or slot_index >= _slot_effect_icons.size():
+		return
+	var icons := _slot_effect_icons[slot_index]
+	if icons == null:
+		return
+	var card := _slot_cards[slot_index]
+	if card == null or not card.visible:
+		_clear_slot_effect_icons(slot_index)
+		return
+	var icon_entries: Array = IngredientCard.partition_effect_entries(
+		effect_entries
+	).get("icon_entries", [])
+	if icon_entries.is_empty():
+		icons.clear_icons()
+		icons.visible = false
+		return
+	icons.bind_entries(icon_entries, _lookup_effect_ingredient)
+	icons.visible = true
+	_layout_slot_effect_icon(slot_index)
+
+
+func _clear_slot_effect_icons(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _slot_effect_icons.size():
+		return
+	var icons := _slot_effect_icons[slot_index]
+	if icons == null:
+		return
+	icons.clear_icons()
+	icons.visible = false
+
+
+func _layout_all_effect_icons() -> void:
+	for slot_index in _slot_effect_icons.size():
+		_layout_slot_effect_icon(slot_index)
+
+
+func _layout_slot_effect_icon(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _slot_effect_icons.size():
+		return
+	var icons := _slot_effect_icons[slot_index]
+	if icons == null or not icons.visible:
+		return
+	if slot_index >= _slot_anchors.size() or slot_index >= _slot_cards.size():
+		return
+	var anchor := _slot_anchors[slot_index]
+	var card := _slot_cards[slot_index]
+	if anchor == null or card == null or not card.visible:
+		icons.visible = false
+		return
+	var strip_size := icons.custom_minimum_size
+	if icons.size != Vector2.ZERO:
+		strip_size = icons.size
+	var icon_y := 0.0
+	if card.has_method("get_hand_icon_strip_anchor_y"):
+		icon_y = card.get_hand_icon_strip_anchor_y()
+	icons.position = Vector2(
+		anchor.position.x + (CARD_DISPLAY_SIZE.x - strip_size.x) * 0.5,
+		anchor.position.y + icon_y
+	)
+	if _hover_slot == slot_index or _selected_slot == slot_index:
+		icons.z_index = HAND_SLOT_COUNT + HOVER_Z_BOOST + slot_index
+	elif _dragging_card != null and slot_index == _drag_source_slot:
+		icons.visible = false
+	else:
+		icons.z_index = HAND_SLOT_COUNT + slot_index
+
+
+func _lookup_effect_ingredient(ingredient_id: String) -> IngredientData:
+	if ingredient_id.is_empty():
+		return null
+	if GameManager.run != null:
+		var ingredient := GameManager.run.find_ingredient(ingredient_id)
+		if ingredient != null:
+			return ingredient
+	return IngredientData.new(
+		ingredient_id,
+		ingredient_id,
+		"",
+		0,
+		0,
+		0,
+		IngredientData.Rarity.COMMON
+	)
+
+
+func set_in_rhythm_shake_slots(slot_indices: Array) -> void:
+	_active_rhythm_shake_slots = slot_indices.duplicate()
+	var active_slots: Dictionary = {}
+	for slot_index in _active_rhythm_shake_slots:
+		active_slots[int(slot_index)] = true
+
+	for slot_index in HAND_SLOT_COUNT:
+		if active_slots.has(slot_index) and _slot_has_visible_card(slot_index):
+			_ensure_rhythm_shake(slot_index)
+		else:
+			_stop_rhythm_shake(slot_index)
+
+
+func _slot_has_visible_card(slot_index: int) -> bool:
+	if slot_index < 0 or slot_index >= _slot_cards.size():
+		return false
+	var card := _slot_cards[slot_index]
+	return card != null and card.visible
+
+
+func _ensure_rhythm_shake(slot_index: int) -> void:
+	var tween: Tween = _rhythm_shake_slot_tweens.get(slot_index)
+	if tween != null and tween.is_valid():
+		return
+	_start_rhythm_shake(slot_index)
+
+
+func _start_rhythm_shake(slot_index: int) -> void:
+	_stop_rhythm_shake(slot_index)
+	if slot_index < 0 or slot_index >= _slot_anchors.size():
+		return
+	var anchor := _slot_anchors[slot_index]
+	if anchor == null:
+		return
+
+	var rest := _anchor_rest_position(slot_index)
+	anchor.position = rest
+	var shake_tween := create_tween().set_loops()
+	shake_tween.tween_property(
+		anchor,
+		"position",
+		rest + Vector2(RHYTHM_SHAKE_OFFSET.x, 0.0),
+		RHYTHM_SHAKE_STEP
+	)
+	shake_tween.tween_property(
+		anchor,
+		"position",
+		rest + Vector2(-RHYTHM_SHAKE_OFFSET.x, RHYTHM_SHAKE_OFFSET.y),
+		RHYTHM_SHAKE_STEP
+	)
+	shake_tween.tween_property(
+		anchor,
+		"position",
+		rest + Vector2(0.0, -RHYTHM_SHAKE_OFFSET.y),
+		RHYTHM_SHAKE_STEP
+	)
+	shake_tween.tween_property(anchor, "position", rest, RHYTHM_SHAKE_STEP)
+	_rhythm_shake_slot_tweens[slot_index] = shake_tween
+
+
+func _stop_rhythm_shake(slot_index: int) -> void:
+	var tween: Tween = _rhythm_shake_slot_tweens.get(slot_index)
+	if tween != null and tween.is_valid():
+		tween.kill()
+	_rhythm_shake_slot_tweens.erase(slot_index)
+	if slot_index < 0 or slot_index >= _slot_anchors.size():
+		return
+	var anchor := _slot_anchors[slot_index]
+	if anchor != null:
+		anchor.position = _anchor_rest_position(slot_index)
+	_layout_slot_effect_icon(slot_index)
+
+
+func _stop_all_rhythm_shakes() -> void:
+	for slot_index in _rhythm_shake_slot_tweens.keys():
+		_stop_rhythm_shake(int(slot_index))
+
+
+func _anchor_rest_position(slot_index: int) -> Vector2:
+	if slot_index >= 0 and slot_index < _anchor_rest_positions.size():
+		return _anchor_rest_positions[slot_index]
+	return Vector2.ZERO
+
+
+func _layout_slots() -> void:
+	if _slot_row == null:
+		return
+	var total_width := CARD_DISPLAY_SIZE.x + SLOT_OVERLAP * float(HAND_SLOT_COUNT - 1)
+	var start_x := (size.x - total_width) * 0.5
+	_anchor_rest_positions.clear()
+	for slot_index in _slot_anchors.size():
+		var anchor := _slot_anchors[slot_index]
+		if anchor == null:
+			continue
+		var rest := Vector2(
+			start_x + SLOT_OVERLAP * slot_index,
+			HAND_EFFECT_TOP_PAD
+		)
+		anchor.position = rest
+		_anchor_rest_positions.append(rest)
+		_apply_slot_z_index(slot_index)
+	_layout_all_effect_icons()
+
+
+func _apply_slot_z_index(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _slot_cards.size():
+		return
+	var card := _slot_cards[slot_index]
+	if card == null or not card.visible:
+		return
+	if _selected_slot == slot_index:
+		card.z_index = HAND_SLOT_COUNT + HOVER_Z_BOOST + slot_index + 10
+	elif _hover_slot == slot_index:
+		card.z_index = HAND_SLOT_COUNT + HOVER_Z_BOOST + slot_index
+	else:
+		card.z_index = slot_index
+	_layout_slot_effect_icon(slot_index)
+
+
+func _update_hover_process() -> void:
+	set_process(_interaction_enabled)
+	set_process_input(_interaction_enabled)
+
+
+func _process(delta: float) -> void:
+	if _dragging_card != null:
+		_dragging_card.global_position = _mouse_global_position() + _drag_grab_offset
+		if _dragging_card.has_method("update_hand_hover"):
+			_dragging_card.update_hand_hover(true, delta)
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_finish_card_drag()
+			return
+		_update_hand_hover_states(delta)
+		return
+
+	_update_hand_hover_states(delta)
+
+
+func _update_hand_hover_states(delta: float) -> void:
+	var exclude_slot := _drag_source_slot if _dragging_card != null else -1
+	var mouse_point := _mouse_global_position()
+	var hovered_slot := (
+		_topmost_slot_at(mouse_point, exclude_slot) if _interaction_enabled else -1
+	)
+	if hovered_slot != _hover_slot:
+		var previous := _hover_slot
+		_hover_slot = hovered_slot
+		if previous >= 0:
+			_apply_slot_z_index(previous)
+		if _hover_slot >= 0:
+			_apply_slot_z_index(_hover_slot)
+		if _selected_slot >= 0:
+			_apply_slot_z_index(_selected_slot)
+
+	for slot_index in _slot_cards.size():
+		if _dragging_card != null and slot_index == _drag_source_slot:
+			continue
+		var card := _slot_cards[slot_index]
+		if card == null or not card.visible:
+			continue
+		card.update_hand_hover(slot_index == _hover_slot, delta)
+		_layout_slot_effect_icon(slot_index)
+
+
+func _gui_input(event: InputEvent) -> void:
+	if not _interaction_enabled or _dragging_card != null:
+		return
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_press_slot = _topmost_slot_at(event.global_position)
+			_press_position = event.global_position
+			_drag_started = false
+			accept_event()
+		else:
+			if not _drag_started:
+				if _press_slot >= 0:
+					if _press_slot == _selected_slot:
+						_set_selected_slot(-1)
+					else:
+						_set_selected_slot(_press_slot)
+				else:
+					_set_selected_slot(-1)
+			_press_slot = -1
+			_press_position = Vector2.INF
+			_drag_started = false
+		return
+
+	if event is InputEventMouseMotion and _press_slot >= 0 and _swap_enabled:
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			return
+		if event.global_position.distance_to(_press_position) < DRAG_START_DISTANCE:
+			return
+		_drag_started = true
+		_set_selected_slot(-1)
+		_begin_drag_from_slot(_press_slot)
+		_press_slot = -1
+		_press_position = Vector2.INF
+		accept_event()
+
+
+func _input(event: InputEvent) -> void:
+	if _dragging_card == null:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		_finish_card_drag()
+		get_viewport().set_input_as_handled()
+
+
+func _begin_drag_from_slot(slot_index: int) -> void:
+	if not _swap_enabled:
+		return
+	if slot_index < 0 or slot_index >= _slot_cards.size():
+		return
+	var card := _slot_cards[slot_index]
+	if card == null or not card.visible:
+		return
+
+	_drag_source_slot = slot_index
+	var global_pos := card.global_position
+	if card.get_parent() != null:
+		card.get_parent().remove_child(card)
+	_drag_layer.add_child(card)
+	card.global_position = global_pos
+	card.z_index = 50
+	_drag_grab_offset = global_pos - _mouse_global_position()
+	_dragging_card = card
+	_hover_slot = -1
+	_layout_slot_effect_icon(slot_index)
+	for other_slot in _slot_cards.size():
+		if other_slot == slot_index:
+			continue
+		var slot_card := _slot_cards[other_slot]
+		if slot_card == null:
+			continue
+		if slot_card.has_method("update_hand_hover"):
+			slot_card.update_hand_hover(false, 1.0)
+	_stop_rhythm_shake(slot_index)
+	set_process(true)
+	set_process_input(true)
+
+
+func _finish_card_drag() -> void:
+	if _dragging_card == null:
+		return
+
+	var card := _dragging_card
+	var source_slot := _drag_source_slot
+	var target_slot := _best_slot_for_card(card)
+
+	_return_card_to_slot(card, source_slot)
+	card.z_index = source_slot
+	_dragging_card = null
+	_drag_source_slot = -1
+	_press_slot = -1
+	_press_position = Vector2.INF
+	set_process_input(_interaction_enabled)
+
+	if target_slot >= 0 and target_slot != source_slot:
+		swap_requested.emit(source_slot, target_slot)
+
+	_update_hover_process()
+	set_in_rhythm_shake_slots(_active_rhythm_shake_slots)
+	_layout_all_effect_icons()
+
+
+func _return_card_to_slot(card: IngredientCard, slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= _slot_anchors.size():
+		card.queue_free()
+		return
+	var anchor := _slot_anchors[slot_index]
+	if anchor == null:
+		card.queue_free()
+		return
+	if card.get_parent() != null:
+		card.get_parent().remove_child(card)
+	anchor.add_child(card)
+	card.position = Vector2.ZERO
+	if slot_index < _slot_cards.size():
+		_slot_cards[slot_index] = card
+
+
+func _slot_hover_hit_rect(slot_index: int, card: IngredientCard) -> Rect2:
+	if card == null:
+		return Rect2()
+
+	var hit_rect := (
+		card.get_hand_hit_rect() if card.has_method("get_hand_hit_rect") else card.get_global_rect()
+	)
+	if slot_index >= 0 and slot_index < _slot_anchors.size():
+		var anchor := _slot_anchors[slot_index]
+		if anchor != null:
+			hit_rect = hit_rect.merge(anchor.get_global_rect())
+
+	var pad_top := HAND_HOVER_RISE * CARD_SCALE * HAND_HOVER_SCALE
+	hit_rect.position.y -= pad_top
+	hit_rect.size.y += pad_top + HAND_HOVER_PAD_BOTTOM
+	return hit_rect
+
+
+func _topmost_slot_at(global_point: Vector2, exclude_slot: int = -1) -> int:
+	var best_slot := -1
+	var best_z := -1
+
+	for slot_index in HAND_SLOT_COUNT:
+		if slot_index == exclude_slot:
+			continue
+		if slot_index >= _slot_cards.size():
+			continue
+		var card := _slot_cards[slot_index]
+		if card == null or not card.visible:
+			continue
+		if _dragging_card != null and slot_index == _drag_source_slot:
+			continue
+		var hit_rect := _slot_hover_hit_rect(slot_index, card)
+		if not hit_rect.has_point(global_point):
+			continue
+		var card_z := card.z_index
+		if card_z > best_z or (card_z == best_z and slot_index > best_slot):
+			best_z = card_z
+			best_slot = slot_index
+
+	return best_slot
+
+
+func _best_slot_for_card(card: IngredientCard) -> int:
+	if card == null:
+		return -1
+
+	var card_rect := card.get_global_rect()
+	var card_center := card_rect.get_center()
+	var mouse_point := _mouse_global_position()
+
+	var best_slot := -1
+	var best_score := -1.0
+
+	for slot_index in _slot_anchors.size():
+		var anchor := _slot_anchors[slot_index]
+		if anchor == null:
+			continue
+		var zone := anchor.get_global_rect()
+		var score := -1.0
+		if zone.has_point(card_center):
+			score = 100000.0 - card_center.distance_squared_to(zone.get_center())
+		elif zone.has_point(mouse_point):
+			score = 50000.0 - mouse_point.distance_squared_to(zone.get_center())
+		else:
+			var overlap := card_rect.intersection(zone)
+			if overlap.size.x > 0.0 and overlap.size.y > 0.0:
+				score = overlap.size.x * overlap.size.y
+		if score > best_score:
+			best_score = score
+			best_slot = slot_index
+
+	if best_slot < 0:
+		var nearest_dist := 220.0 * 220.0
+		for slot_index in _slot_anchors.size():
+			var anchor := _slot_anchors[slot_index]
+			if anchor == null:
+				continue
+			var dist := card_center.distance_squared_to(anchor.get_global_rect().get_center())
+			if dist < nearest_dist:
+				nearest_dist = dist
+				best_slot = slot_index
+
+	return best_slot
+
+
+func _cancel_drag() -> void:
+	if _dragging_card == null:
+		_press_slot = -1
+		_press_position = Vector2.INF
+		return
+	_return_card_to_slot(_dragging_card, _drag_source_slot)
+	_dragging_card.z_index = _drag_source_slot
+	_dragging_card = null
+	_drag_source_slot = -1
+	_press_slot = -1
+	_press_position = Vector2.INF
+	set_process_input(_interaction_enabled)
+	_update_hover_process()
+	_layout_all_effect_icons()
+
+
+func _set_selected_slot(slot_index: int) -> void:
+	if _selected_slot == slot_index:
+		_apply_selection_visuals()
+		return
+	_selected_slot = slot_index
+	_apply_selection_visuals()
+	selection_changed.emit(_selected_slot)
+
+
+func _apply_selection_visuals() -> void:
+	for slot_index in _slot_cards.size():
+		var card := _slot_cards[slot_index]
+		if card == null:
+			continue
+		if card.has_method("set_hand_selected"):
+			card.set_hand_selected(slot_index == _selected_slot)
+		_apply_slot_z_index(slot_index)
+
+
+func _mouse_global_position() -> Vector2:
+	return get_global_mouse_position()

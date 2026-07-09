@@ -1,0 +1,35 @@
+# Godot 4
+.godot/
+*.tmp
+
+# Export builds (rebuild with tools/export_playtest.bat)
+exports/
+
+# Python tooling
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Bundled ffmpeg binaries (large; scripts live in tools/)
+tools/ffmpeg/ffmpeg.zip
+tools/ffmpeg/ffmpeg.exe
+tools/ffmpeg/extract/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+~$*.xlsx
+*.swp
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log
+godot.log
+
+# Local scratch / AI session assets (not part of the game)
+Images for grok/
+images/
+tools/_probe_*.gd
+tools/_sync_xlsx_session_updates.py
