@@ -29,6 +29,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/trinket_reward_overlay.tscn" id="27_trinket_reward"]
 [ext_resource type="Script" uid="uid://c8k2mulligancost" path="res://scripts/ui/shop_button_cost_overlay.gd" id="28_cost_overlay"]
 [ext_resource type="Texture2D" uid="uid://bjtevet3r7nux" path="res://assets/cards/icons/gold_icon.png" id="29_gold_icon"]
+[ext_resource type="PackedScene" uid="uid://settingsgearbtn01" path="res://scenes/ui/settings_gear_button.tscn" id="30_settings_gear"]
 
 [node name="Game" type="Control" unique_id=403037050]
 custom_minimum_size = Vector2(1024, 576)
@@ -55,10 +56,22 @@ color = Color(0.058824, 0.070588, 0.090196, 1)
 [node name="TrinketRewardOverlay" parent="." instance=ExtResource("27_trinket_reward")]
 
 [node name="GameplayMusicPlayer" type="AudioStreamPlayer" parent="." unique_id=1668007247]
+bus = &"Music"
 
 [node name="HudOverlayLayer" type="CanvasLayer" parent="." unique_id=1982736451]
 layer = 10
 follow_viewport_enabled = true
+
+[node name="SettingsGearButton" parent="HudOverlayLayer" instance=ExtResource("30_settings_gear")]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -36.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = 36.0
+grow_horizontal = 0
+z_index = 30
 
 [node name="BagRemainingCountLabel" type="Label" parent="HudOverlayLayer"]
 visible = false
@@ -98,14 +111,17 @@ script = ExtResource("12_brew_panel")
 [node name="CauldronPlopPlayer" type="AudioStreamPlayer" parent="PhaseSwipeHost/BrewPanel" unique_id=658198309]
 stream = ExtResource("17_cauldron_plop")
 volume_db = 4.0
+bus = &"SFX"
 
 [node name="BoilingWaterPlayer" type="AudioStreamPlayer" parent="PhaseSwipeHost/BrewPanel" unique_id=227185110]
 stream = ExtResource("18_boiling_water")
 volume_db = -18.0
+bus = &"SFX"
 
 [node name="CauldronExplosionPlayer" type="AudioStreamPlayer" parent="PhaseSwipeHost/BrewPanel" unique_id=1295375791]
 stream = ExtResource("19_cauldron_explosion")
 volume_db = 6.0
+bus = &"SFX"
 
 [node name="DrawFlyLayer" type="CanvasLayer" parent="PhaseSwipeHost/BrewPanel" unique_id=803560024]
 layer = 50
@@ -176,9 +192,9 @@ layout_mode = 1
 
 [node name="GoldCounter" parent="PhaseSwipeHost/BrewPanel" unique_id=1257235171 instance=ExtResource("10_gold_display")]
 anchors_preset = 0
-offset_left = 841.0
+offset_left = 808.0
 offset_top = 26.0
-offset_right = 1005.0
+offset_right = 972.0
 offset_bottom = 78.0
 
 [node name="LivesDisplay" parent="PhaseSwipeHost/BrewPanel" unique_id=1884570556 instance=ExtResource("15_lives_display")]
@@ -381,6 +397,7 @@ offset_right = 1014.0
 offset_bottom = 538.0
 scale = Vector2(0.4607092, 0.4607092)
 label_text = "Save and Quit"
+center_on_visual_face = false
 
 [node name="DevModeCheckbox" type="CheckBox" parent="PhaseSwipeHost/BrewPanel"]
 offset_left = 819.0

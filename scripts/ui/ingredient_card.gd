@@ -28,7 +28,6 @@ const HONEY_SPLATTER_OVERLAY_TEXTURE := preload(
 )
 
 const HOVER_SCALE := 1.08
-const PICKER_SELECT_SCALE := 1.04
 const PICKER_SHAKE_OFFSET := Vector2(5.0, 2.0)
 const PICKER_SHAKE_STEP := 0.07
 const PICKER_EFFECT_ICON_Y := 18.0
@@ -452,7 +451,7 @@ func _update_hand_effect_icon_position() -> void:
 
 
 func _effect_overlay_card_scale() -> float:
-	return HAND_CARD_SCALE if _hand_mode else EyeballPuzzleLayout.CARD_SCALE
+	return HAND_CARD_SCALE if _hand_mode else EyeballPuzzleLayout.card_scale()
 
 
 func _set_gecko_hand_overlay_visible(visible_overlay: bool) -> void:
@@ -604,8 +603,9 @@ func bind_picker_card(ingredient: IngredientData) -> void:
 	_choice_mode = false
 	_picker_selected = false
 	_puzzle_drag_enabled = false
-	_hover_enabled = false
+	_hover_enabled = true
 	_is_hovered = false
+	_hand_hover_offset = 0.0
 	_clear_hand_effect_entries()
 	bind_preview(ingredient)
 	apply_puzzle_layout()
@@ -621,15 +621,9 @@ func set_picker_selected(selected: bool) -> void:
 	if not _picker_mode:
 		return
 	_picker_selected = selected
-	if selected:
-		_is_hovered = false
-		set_process(false)
-		if _visual_root != null:
-			_visual_root.scale = Vector2.ONE * PICKER_SELECT_SCALE
-	else:
-		_is_hovered = false
-		set_process(false)
-		_reset_visual_scale()
+	_apply_picker_visual_pivot()
+	# Hover/selection scale+rise is driven by _process (same feel as hand cards).
+	set_process(true)
 
 
 func apply_picker_preview(preview: Dictionary) -> void:
@@ -728,7 +722,8 @@ func _stop_picker_preview_shake() -> void:
 		_picker_shake_tween.kill()
 	_picker_shake_tween = null
 	if _visual_root != null:
-		_visual_root.position = Vector2.ZERO
+		# Preserve hand-style hover rise while clearing shake offsets.
+		_visual_root.position = Vector2(0.0, _hand_hover_offset if _picker_mode else 0.0)
 
 
 func set_picker_drag_enabled(_enabled: bool) -> void:
@@ -743,10 +738,9 @@ func sync_picker_input() -> void:
 	disabled = false
 	focus_mode = Control.FOCUS_NONE
 	action_mode = BaseButton.ACTION_MODE_BUTTON_RELEASE
-	_hover_enabled = false
-	_is_hovered = false
-	set_process(false)
-	_reset_visual_scale()
+	_hover_enabled = true
+	set_process(true)
+	_apply_picker_visual_pivot()
 
 
 func apply_puzzle_layout() -> void:
@@ -989,6 +983,9 @@ func _ensure_card_background_visible() -> void:
 func _reset_visual_scale() -> void:
 	if _visual_root != null:
 		_visual_root.scale = Vector2.ONE
+		if not _picker_mode and not _hand_mode:
+			_visual_root.position = Vector2.ZERO
+			_hand_hover_offset = 0.0
 
 
 func _ignore_visual_mouse_input(node: Node) -> void:
@@ -1150,7 +1147,16 @@ func _is_cursor_over_card() -> bool:
 func _apply_picker_visual_pivot() -> void:
 	if _visual_root == null:
 		return
+	# Bottom-center pivot matches hand cards (grows / rises upward).
 	_visual_root.pivot_offset = Vector2(_visual_root.size.x * 0.5, _visual_root.size.y)
+
+
+func _picker_target_scale(hovered: bool) -> float:
+	if _picker_selected:
+		return HAND_SELECTED_SCALE
+	if hovered:
+		return HAND_HOVER_SCALE
+	return 1.0
 
 
 func _process(delta: float) -> void:
@@ -1161,6 +1167,18 @@ func _process(delta: float) -> void:
 			hand_hover_changed.emit(hovered)
 		return
 	if _picker_mode:
+		if _is_animating or _visual_root == null or not _hover_enabled:
+			return
+		# Same scale + rise feel as hand cards.
+		if _picker_shake_tween != null and _picker_shake_tween.is_valid():
+			return
+		_is_hovered = _is_cursor_over_card()
+		var target_scale := _picker_target_scale(_is_hovered)
+		var target_rise := -HAND_HOVER_RISE if (_is_hovered or _picker_selected) else 0.0
+		var next_scale := lerpf(_visual_root.scale.x, target_scale, SCALE_SPEED * delta)
+		_visual_root.scale = Vector2.ONE * next_scale
+		_hand_hover_offset = lerpf(_hand_hover_offset, target_rise, SCALE_SPEED * delta)
+		_visual_root.position.y = _hand_hover_offset
 		return
 	if _picker_selected or not _hover_enabled or _is_animating or _visual_root == null:
 		return

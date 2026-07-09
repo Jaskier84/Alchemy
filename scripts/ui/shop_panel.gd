@@ -7,6 +7,8 @@ const BOOM_BERRY_REWARD_FLY_SIZE := Vector2(112.0, 112.0)
 const BOOM_BERRY_REWARD_NOTE_FADE_DELAY := 2.4
 const BOOM_BERRY_REWARD_NOTE_FADE_DURATION := 0.55
 const BAG_COUNT_LABEL_INSET := Vector2(0.0, 6.0)
+const BAG_HOVER_SCALE := 1.08
+const BAG_HOVER_SCALE_SPEED := 12.0
 
 @export var bag_fly_target_path: NodePath = NodePath("BagTarget/BagIcon")
 
@@ -22,7 +24,7 @@ const BAG_COUNT_LABEL_INSET := Vector2(0.0, 6.0)
 @onready var _boom_berry_reward_note: Label = $BagTarget/BoomBerryRewardNote
 @onready var _bag_target: Control = $BagTarget
 @onready var _bag_button: TextureButton = $BagTarget/BagButton
-@onready var _bag_count_label: Label = $BagTarget/BagCountLabel
+@onready var _bag_count_label: Label = $BagCountLabel
 @onready var _bag_contents: BagContentsOverlay = $BagContentsOverlay
 @onready var _level_aura_banner: LevelAuraBanner = $LevelAuraBanner
 
@@ -30,6 +32,9 @@ var offer_cards: Array[IngredientCard] = []
 var _purchase_animations_pending: int = 0
 var _boss_reward_animation_active: bool = false
 var _boom_berry_reward_note_tween: Tween
+var _bag_base_scale := Vector2.ONE
+var _bag_hover_tween: Tween
+var _bag_hovered: bool = false
 
 
 func _ready() -> void:
@@ -46,6 +51,7 @@ func _ready() -> void:
 		_buy_mulligan_button.pressed.connect(_on_buy_mulligan_pressed)
 	if _bag_button != null and not _bag_button.pressed.is_connected(_on_bag_button_pressed):
 		_bag_button.pressed.connect(_on_bag_button_pressed)
+	_configure_bag_hover()
 	if _bag_contents != null and not _bag_contents.overlay_closed.is_connected(_on_bag_contents_closed):
 		_bag_contents.overlay_closed.connect(_on_bag_contents_closed)
 
@@ -53,7 +59,60 @@ func _ready() -> void:
 		card.offer_pressed.connect(_on_offer_pressed)
 	GameManager.run_changed.connect(refresh)
 	visibility_changed.connect(_on_visibility_changed)
+	if not GameManager.primary_keyboard_feedback.is_connected(_on_primary_keyboard_feedback):
+		GameManager.primary_keyboard_feedback.connect(_on_primary_keyboard_feedback)
 	call_deferred("refresh")
+
+
+func _on_primary_keyboard_feedback(action: StringName, phase: StringName) -> void:
+	if action == &"shop_done" and leave_shop_button != null and leave_shop_button.has_method(
+		"on_keyboard_feedback"
+	):
+		leave_shop_button.on_keyboard_feedback(phase)
+
+
+func _configure_bag_hover() -> void:
+	# Shop bag was a plain TextureButton (no hover). Scale BagTarget so icon +
+	# button stay aligned — same feel as IngredientBagButton in brew.
+	if _bag_target != null:
+		_bag_base_scale = _bag_target.scale
+		call_deferred("_update_bag_target_pivot")
+		if not _bag_target.resized.is_connected(_update_bag_target_pivot):
+			_bag_target.resized.connect(_update_bag_target_pivot)
+	if _bag_button == null:
+		return
+	if not _bag_button.mouse_entered.is_connected(_on_bag_mouse_entered):
+		_bag_button.mouse_entered.connect(_on_bag_mouse_entered)
+	if not _bag_button.mouse_exited.is_connected(_on_bag_mouse_exited):
+		_bag_button.mouse_exited.connect(_on_bag_mouse_exited)
+
+
+func _update_bag_target_pivot() -> void:
+	if _bag_target != null:
+		_bag_target.pivot_offset = _bag_target.size * 0.5
+
+
+func _on_bag_mouse_entered() -> void:
+	if _bag_button != null and _bag_button.disabled:
+		return
+	_bag_hovered = true
+	_tween_bag_scale(_bag_base_scale * BAG_HOVER_SCALE)
+
+
+func _on_bag_mouse_exited() -> void:
+	_bag_hovered = false
+	_tween_bag_scale(_bag_base_scale)
+
+
+func _tween_bag_scale(target: Vector2) -> void:
+	if _bag_target == null:
+		return
+	if _bag_hover_tween != null:
+		_bag_hover_tween.kill()
+	_bag_hover_tween = create_tween()
+	_bag_hover_tween.tween_property(
+		_bag_target, "scale", target, 1.0 / BAG_HOVER_SCALE_SPEED
+	)
 
 
 func _gather_offer_cards() -> void:
@@ -445,28 +504,50 @@ func _schedule_boom_berry_reward_note_fade() -> void:
 
 
 func _align_bag_count_label() -> void:
-	if _bag_count_label == null or _bag_button == null or not visible:
+	if _bag_count_label == null or _bag_button == null or _bag_target == null or not visible:
 		return
 	var label_size := _bag_count_label.get_minimum_size()
 	label_size.x = maxf(label_size.x, 28.0)
 	label_size.y = maxf(label_size.y, 24.0)
 	_bag_count_label.custom_minimum_size = label_size
 	_bag_count_label.size = label_size
-	var bag_rect := _bag_button.get_rect()
-	_bag_count_label.position = Vector2(
+	# Rest rect ignores bag hover/bounce scale so the counter stays put.
+	var bag_rect := _get_bag_button_rest_global_rect()
+	var global_pos := Vector2(
 		bag_rect.position.x + (bag_rect.size.x - label_size.x) * 0.5,
 		bag_rect.end.y + BAG_COUNT_LABEL_INSET.y
 	)
+	_bag_count_label.global_position = global_pos
+
+
+func _get_bag_button_rest_global_rect() -> Rect2:
+	if _bag_button == null or _bag_target == null:
+		return Rect2()
+	var shop_item := _bag_target.get_parent() as CanvasItem
+	var shop_xf := (
+		shop_item.get_global_transform()
+		if shop_item != null
+		else Transform2D.IDENTITY
+	)
+	var target_origin := shop_xf * _bag_target.position
+	var pivot := _bag_target.pivot_offset
+	var local_rect := _bag_button.get_rect()
+	var top_left := target_origin + pivot + (local_rect.position - pivot) * _bag_base_scale
+	var bottom_right := target_origin + pivot + (local_rect.end - pivot) * _bag_base_scale
+	return Rect2(top_left, bottom_right - top_left)
 
 
 func _bounce_bag_target() -> void:
 	if _bag_target == null:
 		return
-	var base_scale := _bag_target.scale
+	if _bag_hover_tween != null:
+		_bag_hover_tween.kill()
+	var rest_scale := _bag_base_scale * (BAG_HOVER_SCALE if _bag_hovered else 1.0)
 	var tween := create_tween()
-	tween.tween_property(_bag_target, "scale", base_scale * Vector2(1.08, 0.94), 0.07)
-	tween.tween_property(_bag_target, "scale", base_scale * Vector2(0.96, 1.05), 0.08)
-	tween.tween_property(_bag_target, "scale", base_scale, 0.1).set_trans(Tween.TRANS_BOUNCE)
+	_bag_hover_tween = tween
+	tween.tween_property(_bag_target, "scale", _bag_base_scale * Vector2(1.08, 0.94), 0.07)
+	tween.tween_property(_bag_target, "scale", _bag_base_scale * Vector2(0.96, 1.05), 0.08)
+	tween.tween_property(_bag_target, "scale", rest_scale, 0.1).set_trans(Tween.TRANS_BOUNCE)
 
 
 func _refresh_bag_contents_if_open() -> void:

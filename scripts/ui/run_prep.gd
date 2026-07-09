@@ -27,6 +27,13 @@ func _wire_controls() -> void:
 		_bag_button.pressed.connect(_on_bag_pressed)
 	if _ready_button != null and not _ready_button.pressed.is_connected(_on_ready_pressed):
 		_ready_button.pressed.connect(_on_ready_pressed)
+	if not GameManager.primary_keyboard_feedback.is_connected(_on_primary_keyboard_feedback):
+		GameManager.primary_keyboard_feedback.connect(_on_primary_keyboard_feedback)
+
+
+func _on_primary_keyboard_feedback(action: StringName, phase: StringName) -> void:
+	if action == &"ready" and _ready_button != null and _ready_button.has_method("on_keyboard_feedback"):
+		_ready_button.on_keyboard_feedback(phase)
 
 
 func _on_bag_pressed() -> void:

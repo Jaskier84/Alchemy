@@ -52,8 +52,6 @@ var _is_swiping: bool = false
 var _rhythm_shake_tween: Tween
 var _aura_description_rest_position := Vector2.ZERO
 var _rhythm_shake_active: bool = false
-
-
 func _ready() -> void:
 	if not GameManager.may_enter_game_scene():
 		SceneTransition.go_to(GameManager.RUN_PREP_SCENE_PATH)
@@ -108,6 +106,7 @@ func _ready() -> void:
 		)
 
 	call_deferred("_initialize_hud")
+	Settings.configure_music_player(_gameplay_music_player)
 	_start_gameplay_music()
 	if _aura_description_label != null:
 		_aura_description_rest_position = _aura_description_label.position

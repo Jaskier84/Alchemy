@@ -36,6 +36,7 @@ const BUY_BREW_MULLIGAN_COST_FONT := 18
 @onready var _cauldron_contents: BagContentsOverlay = $CauldronContentsOverlay
 @onready var _player_hand: PlayerHandRow = $PlayerHandRow
 @onready var _play_hand_button: WoodenButton = $PlayHandButton
+@onready var _add_ingredient_button: IngredientBagButton = $AddIngredientButton
 @onready var _hand_undo_button: ShopRerollButton = $HandUndoButton
 @onready var _hand_undo_label: Label = $HandUndoLabel
 @onready var _hand_mulligan_button: ShopRerollButton = $HandMulliganButton
@@ -115,7 +116,13 @@ func _ready() -> void:
 		if not _player_hand.selection_changed.is_connected(_on_hand_selection_changed):
 			_player_hand.selection_changed.connect(_on_hand_selection_changed)
 	if _play_hand_button != null:
-		_play_hand_button.scale = Vector2.ONE * PLAY_HAND_BUTTON_SCALE
+		var play_scale := Vector2.ONE * PLAY_HAND_BUTTON_SCALE
+		if _play_hand_button.has_method("set_base_scale"):
+			_play_hand_button.set_base_scale(play_scale)
+		else:
+			_play_hand_button.scale = play_scale
+	if not GameManager.primary_keyboard_feedback.is_connected(_on_primary_keyboard_feedback):
+		GameManager.primary_keyboard_feedback.connect(_on_primary_keyboard_feedback)
 
 	visibility_changed.connect(_on_visibility_changed)
 	visibility_changed.connect(_sync_brew_ambience)
@@ -341,6 +348,19 @@ func _on_bat_wing_picker_completed(selected: IngredientData) -> void:
 
 func _on_play_hand_pressed() -> void:
 	GameManager.try_play_hand()
+
+
+func _on_primary_keyboard_feedback(action: StringName, phase: StringName) -> void:
+	if action == &"play" and _play_hand_button != null and _play_hand_button.has_method(
+		"on_keyboard_feedback"
+	):
+		_play_hand_button.on_keyboard_feedback(phase)
+	elif (
+		action == &"draw"
+		and _add_ingredient_button != null
+		and _add_ingredient_button.has_method("on_keyboard_feedback")
+	):
+		_add_ingredient_button.on_keyboard_feedback(phase)
 
 
 func _on_hand_undo_pressed() -> void:
@@ -573,6 +593,8 @@ func _apply_boiling_pitch(fill_ratio: float) -> void:
 
 func _sync_brew_ambience() -> void:
 	if _boiling_water_player == null:
+		return
+	if not is_inside_tree() or not _boiling_water_player.is_inside_tree():
 		return
 	if not visible or _brew_ambience_suppressed:
 		_boiling_water_player.stop()

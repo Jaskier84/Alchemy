@@ -3,11 +3,31 @@ extends Control
 
 const _AuraEffects := preload("res://scripts/brewing/aura_effects.gd")
 
+const CONTENT_LEFT := 14.0
+const CONTENT_RIGHT := 292.0
+
+# Fixed geometry — description keeps full readable size; counter sits under it.
+# Banner instances are taller than 106 (parent offsets ≈ 152px), so we use that room.
+const LEVEL_TOP := 6.0
+const LEVEL_BOTTOM := 32.0
+const LEVEL_FONT := 22
+const NAME_TOP := 30.0
+const NAME_BOTTOM := 58.0
+const NAME_FONT := 24
+const DESC_TOP := 56.0
+const DESC_BOTTOM := 100.0
+const DESC_FONT := 16
+const COUNT_TOP := 100.0
+const COUNT_BOTTOM := 140.0
+const COUNT_NUM_FONT := 34
+const COUNT_CAP_FONT := 18
+
 @onready var _level_label: Label = $LevelLabel
 @onready var _aura_name_label: Label = $AuraNameLabel
 @onready var _aura_description_label: Label = $AuraDescriptionLabel
-@onready var _countdown_label: Label = $AuraCountdownLabel
-@onready var _countdown_caption: Label = $AuraCountdownCaption
+@onready var _countdown_row: HBoxContainer = $AuraCountdownRow
+@onready var _countdown_label: Label = $AuraCountdownRow/AuraCountdownLabel
+@onready var _countdown_caption: Label = $AuraCountdownRow/AuraCountdownCaption
 @onready var _practice_restart_button: Control = $PracticeRestartButton
 
 var _preview_mode: bool = false
@@ -15,6 +35,12 @@ var _preview_mode: bool = false
 
 func _ready() -> void:
 	_connect_refresh_signals()
+	# Clip only the description box so wrap stays inside its rect — not so short
+	# that multi-line aura text disappears.
+	if _aura_description_label != null:
+		_aura_description_label.clip_contents = true
+		_aura_description_label.clip_text = false
+	_apply_stable_layout()
 	call_deferred("refresh_interval_countdown")
 
 
@@ -51,7 +77,6 @@ func _on_presentation_idle() -> void:
 
 func bind_preview(level: int, aura: AuraData) -> void:
 	_preview_mode = true
-	_layout_description_label()
 	if _level_label != null:
 		_level_label.text = "Level %d" % level
 	if aura == null:
@@ -72,12 +97,11 @@ func bind_preview(level: int, aura: AuraData) -> void:
 			else:
 				_aura_description_label.text = aura.description
 		modulate = Color(1.0, 0.58, 0.58, 1.0) if is_boss else Color.WHITE
-	if _countdown_label != null:
-		_countdown_label.visible = false
-	if _countdown_caption != null:
-		_countdown_caption.visible = false
+	if _countdown_row != null:
+		_countdown_row.visible = false
 	if _practice_restart_button != null:
 		_practice_restart_button.visible = false
+	_apply_stable_layout()
 
 
 func refresh_interval_countdown() -> void:
@@ -94,26 +118,37 @@ func refresh_interval_countdown() -> void:
 		):
 			countdown = session.get_aura_interval_countdown()
 			show_countdown = countdown > 0
+	if _countdown_label != null and show_countdown:
+		_countdown_label.text = str(countdown)
+	if _countdown_row != null:
+		_countdown_row.visible = show_countdown
+	_apply_stable_layout()
+
+
+func _apply_stable_layout() -> void:
+	_place_label(_level_label, LEVEL_TOP, LEVEL_BOTTOM, LEVEL_FONT)
+	_place_label(_aura_name_label, NAME_TOP, NAME_BOTTOM, NAME_FONT)
+	_place_label(_aura_description_label, DESC_TOP, DESC_BOTTOM, DESC_FONT)
+
+	if _countdown_row != null:
+		_countdown_row.offset_left = CONTENT_LEFT
+		_countdown_row.offset_right = CONTENT_RIGHT
+		_countdown_row.offset_top = COUNT_TOP
+		_countdown_row.offset_bottom = COUNT_BOTTOM
+		_countdown_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	if _countdown_label != null:
-		_countdown_label.visible = show_countdown
-		if show_countdown:
-			_countdown_label.text = str(countdown)
+		_countdown_label.add_theme_font_size_override("font_size", COUNT_NUM_FONT)
 	if _countdown_caption != null:
-		_countdown_caption.visible = show_countdown
-	_layout_description_label()
+		_countdown_caption.add_theme_font_size_override("font_size", COUNT_CAP_FONT)
 
 
-func _layout_description_label() -> void:
-	if _aura_description_label == null:
+func _place_label(label: Label, top: float, bottom: float, font_size: int) -> void:
+	if label == null:
 		return
-	var reserve_countdown := (
-		not _preview_mode
-		and _countdown_label != null
-		and _countdown_label.visible
-	)
-	if reserve_countdown:
-		_aura_description_label.offset_left = 18.0
-		_aura_description_label.offset_right = 236.0
-	else:
-		_aura_description_label.offset_left = 14.0
-		_aura_description_label.offset_right = 292.0
+	label.offset_left = CONTENT_LEFT
+	label.offset_right = CONTENT_RIGHT
+	label.offset_top = top
+	label.offset_bottom = bottom
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.add_theme_font_size_override("font_size", font_size)

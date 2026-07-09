@@ -10,10 +10,17 @@ extends TextureButton
 
 const HOVER_SCALE := 1.08
 const SCALE_SPEED := 12.0
+const HOLD_CANCEL_SEC := 2.0
 const REFERENCE_SIZE := Vector2(256.0, 256.0)
 const FONT_SIZE := 72
 
 var _base_scale := Vector2.ONE
+var _holding: bool = false
+var _hold_cancelled: bool = false
+var _hold_timer: SceneTreeTimer = null
+var _scale_tween: Tween = null
+var _keyboard_held: bool = false
+var _mouse_hovering: bool = false
 
 
 func _ready() -> void:
@@ -24,10 +31,15 @@ func _ready() -> void:
 		_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_update_pivot()
 	_base_scale = scale
+	action_mode = BaseButton.ACTION_MODE_BUTTON_RELEASE
 	if not mouse_entered.is_connected(_on_mouse_entered):
 		mouse_entered.connect(_on_mouse_entered)
 	if not mouse_exited.is_connected(_on_mouse_exited):
 		mouse_exited.connect(_on_mouse_exited)
+	if not button_down.is_connected(_on_button_down):
+		button_down.connect(_on_button_down)
+	if not button_up.is_connected(_on_button_up):
+		button_up.connect(_on_button_up)
 	if not pressed.is_connected(_on_pressed):
 		pressed.connect(_on_pressed)
 	if not resized.is_connected(_on_resized):
@@ -46,7 +58,6 @@ func _update_pivot() -> void:
 
 
 ## Global rect as if scale were at rest (ignores hover grow).
-## Uses parent transform + local position so current hover scale is ignored.
 func get_rest_global_rect() -> Rect2:
 	var parent_item := get_parent() as CanvasItem
 	var parent_xf := (
@@ -85,17 +96,81 @@ func _update_label() -> void:
 
 
 func _on_mouse_entered() -> void:
+	_mouse_hovering = true
+	if _holding or _keyboard_held or disabled:
+		return
 	_tween_scale(_base_scale * HOVER_SCALE)
 
 
 func _on_mouse_exited() -> void:
+	_mouse_hovering = false
+	if _holding or _keyboard_held:
+		return
 	_tween_scale(_base_scale)
 
 
+func _on_button_down() -> void:
+	if disabled:
+		return
+	_holding = true
+	_hold_cancelled = false
+	_update_pivot()
+	_tween_scale(_base_scale * HOVER_SCALE)
+	_hold_timer = get_tree().create_timer(HOLD_CANCEL_SEC)
+	_hold_timer.timeout.connect(_on_hold_timeout, CONNECT_ONE_SHOT)
+
+
+func _on_hold_timeout() -> void:
+	if not _holding or _hold_cancelled:
+		return
+	_hold_cancelled = true
+	_tween_scale(_base_scale)
+	var was_disabled := disabled
+	disabled = true
+	await get_tree().process_frame
+	if is_instance_valid(self):
+		disabled = was_disabled
+		_holding = false
+
+
+func _on_button_up() -> void:
+	_holding = false
+	_hold_timer = null
+	if _hold_cancelled:
+		_hold_cancelled = false
+		_tween_scale(_base_scale if not _mouse_hovering else _base_scale * HOVER_SCALE)
+		return
+	if not _keyboard_held:
+		_tween_scale(_base_scale if not _mouse_hovering else _base_scale * HOVER_SCALE)
+
+
 func _on_pressed() -> void:
+	if _hold_cancelled:
+		return
 	scale = _base_scale
 
 
+## Keyboard draw: hover while held; cancel restores rest.
+func on_keyboard_feedback(phase: StringName) -> void:
+	match phase:
+		&"started":
+			_keyboard_held = true
+			_update_pivot()
+			_tween_scale(_base_scale * HOVER_SCALE)
+		&"cancelled":
+			_keyboard_held = false
+			_tween_scale(_base_scale if not _mouse_hovering else _base_scale * HOVER_SCALE)
+		&"activated":
+			_keyboard_held = false
+			_tween_scale(_base_scale)
+
+
+func play_hover_feedback() -> void:
+	on_keyboard_feedback(&"started")
+
+
 func _tween_scale(target: Vector2) -> void:
-	var tween := create_tween()
-	tween.tween_property(self, "scale", target, 1.0 / SCALE_SPEED)
+	if _scale_tween != null:
+		_scale_tween.kill()
+	_scale_tween = create_tween()
+	_scale_tween.tween_property(self, "scale", target, 1.0 / SCALE_SPEED)

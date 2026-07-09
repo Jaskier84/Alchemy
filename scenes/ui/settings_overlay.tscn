@@ -1,0 +1,182 @@
+[gd_scene format=3 uid="uid://settingsoverlay01"]
+
+[ext_resource type="Script" path="res://scripts/ui/settings_overlay.gd" id="1_script"]
+[ext_resource type="FontFile" uid="uid://bc6j6q1yher43" path="res://assets/fonts/ChildHood.otf" id="2_font"]
+[ext_resource type="PackedScene" uid="uid://bn0p2bxvpej5q" path="res://scenes/ui/wooden_button.tscn" id="3_button"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 20.0
+content_margin_top = 16.0
+content_margin_right = 20.0
+content_margin_bottom = 14.0
+bg_color = Color(0.05, 0.06, 0.1, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.72, 0.6, 0.32, 0.85)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[node name="SettingsOverlay" type="CanvasLayer"]
+layer = 200
+visible = false
+script = ExtResource("1_script")
+
+[node name="OverlayRoot" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="InputBlocker" type="ColorRect" parent="OverlayRoot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0, 0, 0, 0.5)
+
+[node name="Panel" type="PanelContainer" parent="OverlayRoot"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -268.0
+offset_right = 180.0
+offset_bottom = 268.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Content" type="VBoxContainer" parent="OverlayRoot/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="Title" type="Label" parent="OverlayRoot/Panel/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.75, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 32
+text = "Settings"
+horizontal_alignment = 1
+
+[node name="MusicRow" type="HBoxContainer" parent="OverlayRoot/Panel/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="MusicLabel" type="Label" parent="OverlayRoot/Panel/Content/MusicRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.92, 0.88, 0.74, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 22
+text = "Music On"
+vertical_alignment = 1
+
+[node name="MusicCheck" type="CheckBox" parent="OverlayRoot/Panel/Content/MusicRow"]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+focus_mode = 0
+button_pressed = true
+
+[node name="SoundRow" type="HBoxContainer" parent="OverlayRoot/Panel/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="SoundLabel" type="Label" parent="OverlayRoot/Panel/Content/SoundRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.92, 0.88, 0.74, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 22
+text = "Sound On"
+vertical_alignment = 1
+
+[node name="SoundCheck" type="CheckBox" parent="OverlayRoot/Panel/Content/SoundRow"]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+focus_mode = 0
+button_pressed = true
+
+[node name="VolumeLabel" type="Label" parent="OverlayRoot/Panel/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.88, 0.74, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 22
+text = "Volume"
+horizontal_alignment = 1
+
+[node name="VolumeSlider" type="HSlider" parent="OverlayRoot/Panel/Content"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+focus_mode = 0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
+[node name="MouseOnlyRow" type="HBoxContainer" parent="OverlayRoot/Panel/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="MouseOnlyLabel" type="Label" parent="OverlayRoot/Panel/Content/MouseOnlyRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 0
+theme_override_colors/font_color = Color(0.92, 0.88, 0.74, 1)
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 20
+text = "Mouse Only Controls"
+vertical_alignment = 1
+
+[node name="MouseOnlyCheck" type="CheckBox" parent="OverlayRoot/Panel/Content/MouseOnlyRow"]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+focus_mode = 0
+
+[node name="SpacerBottom" type="Control" parent="OverlayRoot/Panel/Content"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BackButton" parent="OverlayRoot/Panel/Content" instance=ExtResource("3_button")]
+custom_minimum_size = Vector2(200, 72)
+layout_mode = 2
+size_flags_horizontal = 4
+label_text = "Back"
+
+[node name="ExitButton" parent="OverlayRoot/Panel/Content" instance=ExtResource("3_button")]
+custom_minimum_size = Vector2(200, 72)
+layout_mode = 2
+size_flags_horizontal = 4
+label_text = "Exit Game"
+
+[node name="MouseOnlyTooltip" type="Label" parent="OverlayRoot"]
+visible = false
+z_index = 20
+layout_mode = 0
+offset_right = 320.0
+offset_bottom = 22.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.96, 0.82, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 16
+text = "disable enter and spacebar functionality"
+

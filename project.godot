@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 GameManager="*res://scripts/autoload/game_manager.gd"
 SceneTransition="*res://scripts/autoload/scene_transition.gd"
+Settings="*res://scripts/autoload/settings.gd"
 
 [display]
 

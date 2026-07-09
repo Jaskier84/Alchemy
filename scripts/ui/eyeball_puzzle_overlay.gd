@@ -10,11 +10,11 @@ enum Mode { PUZZLE, PREVIEW, PICKER }
 
 @onready var _dimmer: ColorRect = $Dimmer
 @onready var _layout: CenterContainer = $Layout
-@onready var _title_label: Label = $Layout/PanelOffset/Panel/Content/TitleRow/Title
+@onready var _title_label: Label = $Layout/PanelOffset/Panel/Content/TitleHeader/Title
 @onready var _hint_label: Label = $Layout/PanelOffset/Panel/Content/HintLabel
-@onready var _title_row: HBoxContainer = $Layout/PanelOffset/Panel/Content/TitleRow
+@onready var _title_header: Control = $Layout/PanelOffset/Panel/Content/TitleHeader
 @onready var _picker_toggle_button: WoodenButton = (
-	$Layout/PanelOffset/Panel/Content/TitleRow/PickerToggleButton
+	$Layout/PanelOffset/Panel/Content/TitleHeader/PickerToggleButton
 )
 @onready var _order_slots_row: HBoxContainer = $Layout/PanelOffset/Panel/Content/OrderSlotsRow
 @onready var _done_button: WoodenButton = $Layout/PanelOffset/Panel/Content/DoneButton
@@ -47,7 +47,7 @@ func _ready() -> void:
 			_reroll_button.pressed.connect(_on_reroll_pressed)
 		_reroll_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	if _picker_toggle_button != null:
-		_picker_toggle_button.custom_minimum_size = Vector2(140.0, 56.0)
+		_picker_toggle_button.custom_minimum_size = Vector2(88.0, 40.0)
 		_picker_toggle_button.size = _picker_toggle_button.custom_minimum_size
 		if not _picker_toggle_button.pressed.is_connected(_on_picker_toggle_pressed):
 			_picker_toggle_button.pressed.connect(_on_picker_toggle_pressed)
@@ -133,7 +133,7 @@ func show_picker(ingredients: Array) -> void:
 	_selected_picker_card = null
 	_set_overlay_copy(
 		"Choose an ingredient",
-		"Tap a card to select it, then tap again or press Done"
+		"Tap a card to select it, then press Done or Enter"
 	)
 	_configure_slots_for_picker(ingredients.size())
 	_populate_slots(ingredients, false)
@@ -145,6 +145,7 @@ func show_picker(ingredients: Array) -> void:
 		_done_button.disabled = true
 	_refresh_reroll_button()
 	_configure_picker_toggle_button()
+	set_process_unhandled_input(true)
 	GameManager.clear_bat_wing_pick_preview()
 
 
@@ -152,6 +153,7 @@ func hide_puzzle() -> void:
 	_cancel_drag()
 	_selected_picker_card = null
 	_mode = Mode.PUZZLE
+	set_process_unhandled_input(false)
 	_reset_picker_chrome()
 	if _done_button != null:
 		_done_button.visible = true
@@ -160,7 +162,19 @@ func hide_puzzle() -> void:
 	visible = false
 	_clear_cards()
 	_reset_slot_visibility()
+	EyeballPuzzleLayout.set_use_picker_scale(false)
 	GameManager.clear_bat_wing_pick_preview()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible or _mode != Mode.PICKER:
+		return
+	if Settings.mouse_only_controls:
+		return
+	if event.is_action_pressed("ui_accept"):
+		if _selected_picker_card != null:
+			_confirm_picker_selection()
+			get_viewport().set_input_as_handled()
 
 
 func _reset_picker_chrome() -> void:
@@ -181,6 +195,8 @@ func _configure_picker_toggle_button() -> void:
 	_picker_toggle_button.visible = true
 	_picker_toggle_button.label_text = "Hide"
 	_picker_toggle_button.disabled = false
+	_picker_toggle_button.custom_minimum_size = Vector2(88.0, 40.0)
+	_picker_toggle_button.size = _picker_toggle_button.custom_minimum_size
 
 
 func _on_picker_toggle_pressed() -> void:
@@ -238,19 +254,25 @@ func _reparent_picker_toggle_to_overlay() -> void:
 
 
 func _restore_picker_toggle_parent() -> void:
-	if _picker_toggle_button == null or _picker_toggle_saved_parent == null:
+	if _picker_toggle_button == null:
 		return
-	if not is_instance_valid(_picker_toggle_saved_parent):
-		_picker_toggle_saved_parent = _title_row
-	var global_pos := _picker_toggle_button.global_position
-	if _picker_toggle_button.get_parent() != _picker_toggle_saved_parent:
-		_picker_toggle_button.get_parent().remove_child(_picker_toggle_button)
-	_picker_toggle_saved_parent.add_child(_picker_toggle_button)
-	_picker_toggle_saved_parent.move_child(
-		_picker_toggle_button,
-		clampi(_picker_toggle_saved_index, 0, _picker_toggle_saved_parent.get_child_count())
-	)
-	_picker_toggle_button.global_position = global_pos
+	var target_parent: Node = _picker_toggle_saved_parent
+	if target_parent == null or not is_instance_valid(target_parent):
+		target_parent = _title_header
+	if target_parent == null:
+		return
+	var current_parent := _picker_toggle_button.get_parent()
+	# Only reparent when needed — add_child errors if already under target_parent.
+	if current_parent != target_parent:
+		if current_parent != null:
+			current_parent.remove_child(_picker_toggle_button)
+		target_parent.add_child(_picker_toggle_button)
+	# Keep anchored top-right on the title header (true center for title label).
+	_picker_toggle_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_picker_toggle_button.offset_left = -_picker_toggle_button.custom_minimum_size.x
+	_picker_toggle_button.offset_top = 0.0
+	_picker_toggle_button.offset_right = 0.0
+	_picker_toggle_button.offset_bottom = _picker_toggle_button.custom_minimum_size.y
 	_picker_toggle_button.z_index = 0
 
 
@@ -263,23 +285,29 @@ func _set_overlay_copy(title: String, hint: String) -> void:
 
 
 func _configure_slots_for_puzzle(active_slot_count: int) -> void:
+	EyeballPuzzleLayout.set_use_picker_scale(false)
 	for i in _order_slots.size():
 		var slot := _order_slots[i]
 		slot.visible = i < active_slot_count
 		slot.set_number_visible(active_slot_count > 1)
+		slot.apply_layout_size()
 
 
 func _configure_slots_for_picker(choice_count: int) -> void:
+	EyeballPuzzleLayout.set_use_picker_scale(true)
 	for i in _order_slots.size():
 		var slot := _order_slots[i]
 		slot.visible = i < choice_count
 		slot.set_number_visible(false)
+		slot.apply_layout_size()
 
 
 func _reset_slot_visibility() -> void:
+	EyeballPuzzleLayout.set_use_picker_scale(false)
 	for slot in _order_slots:
 		slot.visible = true
 		slot.set_number_visible(true)
+		slot.apply_layout_size()
 
 
 func _populate_slots(ingredients: Array, enable_drag: bool) -> void:
@@ -386,7 +414,7 @@ func _on_picker_card_pressed(card: IngredientCard) -> void:
 	if card.get_ingredient() == null:
 		return
 	if _selected_picker_card == card:
-		_confirm_picker_selection()
+		_clear_picker_selection()
 		return
 	_set_picker_selection(card)
 
@@ -399,6 +427,14 @@ func _set_picker_selection(card: IngredientCard) -> void:
 	var ingredient := card.get_ingredient()
 	if ingredient != null:
 		GameManager.set_bat_wing_pick_preview(ingredient)
+	_update_done_button_state()
+
+
+func _clear_picker_selection() -> void:
+	if _selected_picker_card != null:
+		_selected_picker_card.set_picker_selected(false)
+	_selected_picker_card = null
+	GameManager.clear_bat_wing_pick_preview()
 	_update_done_button_state()
 
 

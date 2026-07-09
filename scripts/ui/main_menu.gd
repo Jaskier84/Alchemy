@@ -6,6 +6,7 @@ extends Control
 @onready var _intro_audio: AudioStreamPlayer = $IntroAudio
 @onready var _play_button: WoodenButton = $PlayButton
 @onready var _continue_button: WoodenButton = $ContinueButton
+@onready var _settings_button: WoodenButton = $SettingsButton
 @onready var _easy_button: WoodenButton = $EasyButton
 @onready var _hard_button: WoodenButton = $HardButton
 @onready var _exit_button: WoodenButton = $ExitButton
@@ -20,6 +21,11 @@ func _ready() -> void:
 		_sync_editor_presentation()
 		return
 
+	if _intro_audio != null:
+		Settings.configure_music_player(_intro_audio)
+	if _intro_video != null:
+		Settings.configure_music_video(_intro_video)
+
 	if _play_button == null:
 		push_error("MainMenu: PlayButton not found")
 	elif not _play_button.pressed.is_connected(_on_play_pressed):
@@ -27,6 +33,9 @@ func _ready() -> void:
 
 	if _continue_button != null and not _continue_button.pressed.is_connected(_on_continue_pressed):
 		_continue_button.pressed.connect(_on_continue_pressed)
+
+	if _settings_button != null and not _settings_button.pressed.is_connected(_on_settings_pressed):
+		_settings_button.pressed.connect(_on_settings_pressed)
 
 	if _easy_button != null and not _easy_button.pressed.is_connected(_on_easy_pressed):
 		_easy_button.pressed.connect(_on_easy_pressed)
@@ -59,6 +68,8 @@ func _sync_editor_presentation() -> void:
 		_continue_button.visible = true
 	if _play_button != null:
 		_play_button.visible = true
+	if _settings_button != null:
+		_settings_button.visible = true
 	if _easy_button != null:
 		_easy_button.visible = false
 	if _hard_button != null:
@@ -87,6 +98,8 @@ func _reset_intro_state() -> void:
 	_stop_intro_media()
 	if _play_button != null:
 		_play_button.visible = true
+	if _settings_button != null:
+		_settings_button.visible = true
 	if _exit_button != null:
 		_exit_button.visible = true
 	_refresh_continue()
@@ -157,6 +170,8 @@ func _play_intro_then_start_new_run() -> void:
 		_play_button.visible = false
 	if _continue_button != null:
 		_continue_button.visible = false
+	if _settings_button != null:
+		_settings_button.visible = false
 	if _exit_button != null:
 		_exit_button.visible = false
 	if _background != null:
@@ -191,6 +206,10 @@ func _on_continue_pressed() -> void:
 	GameManager.continue_run()
 	GameManager.prepare_continue_game()
 	await SceneTransition.go_to(GameManager.GAME_SCENE_PATH)
+
+
+func _on_settings_pressed() -> void:
+	Settings.open()
 
 
 func _on_exit_pressed() -> void:

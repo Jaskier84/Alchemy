@@ -42,6 +42,7 @@ stretch_mode = 6
 [node name="ShopSelectPopPlayer" type="AudioStreamPlayer" parent="." unique_id=1827657465]
 stream = ExtResource("9_shop_select_pop")
 volume_db = -15.0
+bus = &"SFX"
 
 [node name="FlyLayer" type="CanvasLayer" parent="." unique_id=1325573488]
 layer = 50
@@ -113,12 +114,14 @@ texture_normal = ExtResource("5_bag")
 ignore_texture_size = true
 stretch_mode = 5
 
-[node name="BagCountLabel" type="Label" parent="BagTarget" unique_id=1980971825]
+[node name="BagCountLabel" type="Label" parent="." unique_id=1980971825]
+z_index = 13
 layout_mode = 0
 offset_left = 58.0
 offset_top = 196.0
 offset_right = 126.0
 offset_bottom = 224.0
+mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4

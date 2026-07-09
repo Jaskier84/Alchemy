@@ -32,6 +32,8 @@ signal dev_trinket_picker_requested
 signal brew_resolved(resolution: Dictionary)
 signal game_over(comparison: Dictionary)
 signal presentation_idle
+## Enter/Space hold feedback: phase is &"started", &"cancelled", or &"activated".
+signal primary_keyboard_feedback(action: StringName, phase: StringName)
 
 var current_phase: int = GamePhase.Phase.MAIN_MENU
 var last_brew_cleared: bool = false
@@ -539,6 +541,71 @@ func save_and_quit() -> void:
 	SaveService.save_run(run.to_save_data())
 	run_changed.emit()
 	return_to_main_menu()
+
+
+## Persist the active run when mid-run (settings Exit Game / OS quit path).
+func save_before_exit() -> void:
+	if run == null:
+		return
+	if current_phase not in [
+		GamePhase.Phase.BREWING,
+		GamePhase.Phase.TRINKET_REWARD,
+		GamePhase.Phase.SHOP,
+	]:
+		return
+	SaveService.save_run(run.to_save_data())
+
+
+## What Enter/Space would do right now (empty if nothing available).
+func peek_primary_keyboard_action() -> StringName:
+	match current_phase:
+		GamePhase.Phase.RUN_PREP:
+			if _allow_game_scene:
+				return &""
+			return &"ready"
+		GamePhase.Phase.BREWING:
+			if can_play_hand():
+				return &"play"
+			if can_press_bag():
+				return &"draw"
+			return &""
+		GamePhase.Phase.SHOP:
+			return &"shop_done"
+		_:
+			return &""
+
+
+## Commit a peeked keyboard action (called on key release if hold was not cancelled).
+func commit_primary_keyboard_action(action: StringName) -> bool:
+	match action:
+		&"ready":
+			if current_phase != GamePhase.Phase.RUN_PREP or _allow_game_scene:
+				return false
+			primary_keyboard_feedback.emit(action, &"activated")
+			if not press_ready_to_start_first_brew():
+				return false
+			SceneTransition.go_to(GAME_SCENE_PATH)
+			return true
+		&"play":
+			if not can_play_hand():
+				return false
+			primary_keyboard_feedback.emit(action, &"activated")
+			try_play_hand()
+			return true
+		&"draw":
+			if not can_press_bag():
+				return false
+			primary_keyboard_feedback.emit(action, &"activated")
+			try_draw_ingredient()
+			return true
+		&"shop_done":
+			if current_phase != GamePhase.Phase.SHOP:
+				return false
+			primary_keyboard_feedback.emit(action, &"activated")
+			leave_shop()
+			return true
+		_:
+			return false
 
 
 func return_to_main_menu() -> void:

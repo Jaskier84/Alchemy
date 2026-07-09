@@ -28,6 +28,10 @@ func _ready() -> void:
 	_apply_host_size()
 
 
+func apply_layout_size() -> void:
+	_apply_host_size()
+
+
 func _apply_host_size() -> void:
 	if _card_host == null:
 		return
