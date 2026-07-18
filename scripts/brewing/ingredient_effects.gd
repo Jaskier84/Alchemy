@@ -816,7 +816,7 @@ static func compute_hand_display_stats(
 			last_hand_slot = play_slot
 			last_hand_ingredient = ingredient
 			continue
-		var _cauldron_count := int(step.get("cauldron_count_before", sim_cauldron.size()))
+		var cauldron_count := int(step.get("cauldron_count_before", sim_cauldron.size()))
 		if parrot_doubles_next:
 			parrot_doubles_next = false
 		var point_value := ingredient.point_value
