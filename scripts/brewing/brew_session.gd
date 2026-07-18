@@ -2408,11 +2408,16 @@ func _apply_cinnamon_on_play() -> void:
 	context.gold_gained_this_brew += IngredientEffects.CINNAMON_EVEN_SCORE_GOLD
 
 
-func _gloom_weed_doubles_gold() -> bool:
+## True when stopping now would double gold (last cauldron ingredient is Gloom Weed).
+func gloom_weed_doubles_gold() -> bool:
 	if context.cauldron_contents.is_empty():
 		return false
 	var last := context.cauldron_contents[-1]
 	return last != null and last.id == IngredientEffects.GLOOM_WEED_ID
+
+
+func _gloom_weed_doubles_gold() -> bool:
+	return gloom_weed_doubles_gold()
 
 
 func _resolve_explosion() -> void:
@@ -2825,6 +2830,6 @@ func calculate_display_gold_reward() -> int:
 func _calculate_gold_reward_from(score: int, bonus_gold: int) -> int:
 	var base_reward := score if score <= 14 else 14 + int((score - 14) / 2)
 	var total := base_reward + bonus_gold
-	if _gloom_weed_doubles_gold():
+	if gloom_weed_doubles_gold():
 		total *= 2
 	return _AuraEffects.apply_gold_multiplier(total, context.current_aura)

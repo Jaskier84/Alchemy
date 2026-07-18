@@ -122,13 +122,10 @@ static func collect(session: BrewSession) -> Array[EffectEntry]:
 		true,
 		32
 	)
-	_add_cauldron_count_entry(
-		entries,
-		cauldron,
-		IngredientEffects.GLOOM_WEED_ID,
-		false,
-		33
-	)
+	# Gloom Weed only doubles gold if it is the last ingredient when you stop.
+	# Show the buff only while that condition is still true.
+	if session.gloom_weed_doubles_gold():
+		_add_entry(entries, IngredientEffects.GLOOM_WEED_ID, "x2", 33)
 	_add_cauldron_count_entry(
 		entries,
 		cauldron,
