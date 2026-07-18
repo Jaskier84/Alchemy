@@ -12,8 +12,8 @@ const OPTION_ICON_SIZE := Vector2(180.0, 180.0)
 @onready var _input_blocker: ColorRect = $OverlayRoot/InputBlocker
 @onready var _title_label: Label = $OverlayRoot/Panel/Content/Title
 @onready var _options_row: HBoxContainer = $OverlayRoot/Panel/Content/OptionsRow
-@onready var _bag_button: IngredientBagButton = $OverlayRoot/TopRightHud/BagButton
-@onready var _lives_display: LivesDisplay = $OverlayRoot/TopRightHud/LivesDisplay
+@onready var _bag_button: IngredientBagButton = $OverlayRoot/Panel/Content/TopRightHud/BagButton
+@onready var _lives_display: LivesDisplay = $OverlayRoot/Panel/Content/TopRightHud/LivesDisplay
 @onready var _bag_contents: BagContentsOverlay = $BagContentsOverlay
 @onready var _fly_layer: CanvasLayer = $FlyLayer
 

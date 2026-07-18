@@ -7,10 +7,10 @@
 [ext_resource type="PackedScene" uid="uid://cr5syaod6s2ge" path="res://scenes/ui/bag_contents_overlay.tscn" id="5_bag_contents"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-content_margin_left = 16.0
-content_margin_top = 12.0
-content_margin_right = 16.0
-content_margin_bottom = 12.0
+content_margin_left = 20.0
+content_margin_top = 16.0
+content_margin_right = 20.0
+content_margin_bottom = 16.0
 bg_color = Color(0.05, 0.06, 0.1, 0.96)
 border_width_left = 2
 border_width_top = 2
@@ -53,66 +53,69 @@ anchors_preset = -1
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 18.0
-offset_top = 64.0
+offset_top = 24.0
 offset_right = -18.0
-offset_bottom = -18.0
+offset_bottom = -24.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="Content" type="VBoxContainer" parent="OverlayRoot/Panel"]
+[node name="Content" type="Control" parent="OverlayRoot/Panel"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 2
-theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="OverlayRoot/Panel/Content"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 4.0
+offset_bottom = 42.0
+grow_horizontal = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.95, 0.9, 0.75, 1)
 theme_override_fonts/font = ExtResource("2_font")
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 32
 text = "Choose a Trinket"
 horizontal_alignment = 1
 
 [node name="OptionsRow" type="HBoxContainer" parent="OverlayRoot/Panel/Content"]
-custom_minimum_size = Vector2(0, 360)
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
+layout_mode = 1
+anchors_preset = -1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 52.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 16
 alignment = 1
 
-[node name="BottomSpacer" type="Control" parent="OverlayRoot/Panel/Content"]
-custom_minimum_size = Vector2(0, 8)
-layout_mode = 2
-mouse_filter = 2
-
-[node name="TopRightHud" type="HBoxContainer" parent="OverlayRoot"]
-z_index = 20
+[node name="TopRightHud" type="HBoxContainer" parent="OverlayRoot/Panel/Content"]
+z_index = 5
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -280.0
-offset_top = 8.0
-offset_right = -12.0
-offset_bottom = 60.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 52.0
 grow_horizontal = 0
 mouse_filter = 0
 theme_override_constants/separation = 10
 alignment = 2
 
-[node name="BagButton" parent="OverlayRoot/TopRightHud" instance=ExtResource("3_bag")]
+[node name="BagButton" parent="OverlayRoot/Panel/Content/TopRightHud" instance=ExtResource("3_bag")]
 custom_minimum_size = Vector2(52, 52)
 layout_mode = 2
 size_flags_vertical = 4
 label_text = ""
 
-[node name="LivesDisplay" parent="OverlayRoot/TopRightHud" instance=ExtResource("4_lives")]
+[node name="LivesDisplay" parent="OverlayRoot/Panel/Content/TopRightHud" instance=ExtResource("4_lives")]
 custom_minimum_size = Vector2(210, 52)
 layout_mode = 2
 size_flags_vertical = 4
