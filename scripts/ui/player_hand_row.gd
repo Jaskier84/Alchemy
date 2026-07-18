@@ -64,6 +64,7 @@ func _ready() -> void:
 		_slot_row.clip_contents = false
 	if _effect_icon_row != null:
 		_effect_icon_row.clip_contents = false
+		_effect_icon_row.visible = false
 	_ensure_design_placement()
 	_build_slots()
 	if not resized.is_connected(_on_hand_resized):
@@ -140,21 +141,11 @@ func _build_slots() -> void:
 		card.name = "HandCard%d" % (slot_index + 1)
 		card.visible = false
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card.set_external_icon_strip(true)
+		# Effect icons render on the card itself (correct local placement).
+		card.set_external_icon_strip(false)
 		anchor.add_child(card)
 		_slot_cards.append(card)
-
-		if _effect_icon_row != null:
-			var icons := _ICON_SCENE.instantiate() as HandSlotEffectIcons
-			if icons != null:
-				icons.name = "SlotEffectIcons%d" % (slot_index + 1)
-				icons.visible = false
-				icons.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				icons.z_index = slot_index
-				_effect_icon_row.add_child(icons)
-				_slot_effect_icons.append(icons)
-			else:
-				_slot_effect_icons.append(null)
+		_slot_effect_icons.append(null)
 
 
 func get_selected_slot() -> int:
@@ -166,9 +157,12 @@ func cache_slot_effect_entries(slot_effect_entries: Array) -> void:
 
 
 func get_slot_effect_icons(slot_index: int) -> HandSlotEffectIcons:
-	if slot_index < 0 or slot_index >= _slot_effect_icons.size():
+	if slot_index < 0 or slot_index >= _slot_cards.size():
 		return null
-	return _slot_effect_icons[slot_index]
+	var card := _slot_cards[slot_index]
+	if card == null:
+		return null
+	return card.get_node_or_null("HandSlotEffectIcons") as HandSlotEffectIcons
 
 
 func get_current_hand_slots() -> Array:
@@ -358,7 +352,8 @@ func _bind_slot(
 		card.clear_hand_card()
 		_clear_slot_effect_icons(slot_index)
 		return
-	card.set_external_icon_strip(true)
+	# Keep icons on-card; external strip positioning was wrong (offset up/left).
+	card.set_external_icon_strip(false)
 	if display_stats is Dictionary:
 		card.bind_hand_card(
 			ingredient,
@@ -372,7 +367,7 @@ func _bind_slot(
 		card.bind_hand_card(ingredient, slot_index, false, -1, -1, effect_entries)
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.visible = not _suppressed_slots.has(slot_index)
-	_bind_slot_effect_icons(slot_index, effect_entries)
+	_clear_slot_effect_icons(slot_index)
 	_apply_slot_z_index(slot_index)
 
 
