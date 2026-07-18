@@ -20,11 +20,10 @@ func bind(
 	art_filename: String = ""
 ) -> void:
 	custom_minimum_size = icon_size
-	size = icon_size
+	# Icon uses full-rect anchors; size root deferred so anchors don't fight size writes.
+	call_deferred("set_size", icon_size)
 	var icon := _icon if _icon != null else get_node_or_null("Icon") as TextureRect
 	if icon != null:
-		icon.custom_minimum_size = icon_size
-		icon.size = icon_size
 		if trinket_id != "":
 			icon.texture = _load_trinket_art(trinket_id)
 		elif art_filename != "":

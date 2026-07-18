@@ -24,20 +24,17 @@ func bind(
 	_trinket = trinket
 	_clickable = clickable
 	custom_minimum_size = icon_size
-	size = icon_size
+	# Children use full-rect anchors; only size the root (deferred avoids anchor override warnings).
+	call_deferred("set_size", icon_size)
 	mouse_default_cursor_shape = (
 		CURSOR_POINTING_HAND if clickable else CURSOR_ARROW
 	)
 	var texture := _load_art(trinket)
 	if _icon != null:
-		_icon.custom_minimum_size = icon_size
-		_icon.size = icon_size
 		_icon.texture = texture
 		_icon.visible = texture != null
 	if _fallback != null:
 		_fallback.visible = texture == null
-		_fallback.custom_minimum_size = icon_size
-		_fallback.size = icon_size
 	_set_countdown(countdown_text, icon_size)
 
 

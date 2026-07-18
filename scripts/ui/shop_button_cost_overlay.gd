@@ -14,11 +14,7 @@ const _BOLD_TEXT_COLOR := Color(0, 0, 0, 1)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = icon_size
-	size = icon_size
-	if _icon != null:
-		_icon.custom_minimum_size = icon_size
-		_icon.size = icon_size
+	_apply_icon_size(icon_size)
 	if _label != null:
 		_label.add_theme_color_override("font_color", _BOLD_TEXT_COLOR)
 		_label.add_theme_color_override("font_outline_color", _BOLD_TEXT_COLOR)
@@ -35,12 +31,14 @@ func set_cost(amount: int) -> void:
 
 func configure(new_icon_size: Vector2, new_font_size: int = -1) -> void:
 	icon_size = new_icon_size
-	custom_minimum_size = new_icon_size
-	size = new_icon_size
-	if _icon != null:
-		_icon.custom_minimum_size = new_icon_size
-		_icon.size = new_icon_size
+	_apply_icon_size(new_icon_size)
 	if new_font_size > 0:
 		font_size = new_font_size
 		if _label != null:
 			_label.add_theme_font_size_override("font_size", font_size)
+
+
+func _apply_icon_size(new_icon_size: Vector2) -> void:
+	# Root is free-positioned; children are full-rect anchored so only size the root.
+	custom_minimum_size = new_icon_size
+	call_deferred("set_size", new_icon_size)

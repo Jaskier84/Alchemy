@@ -279,7 +279,7 @@ func _on_hand_card_played(
 	_ctx: BrewContext,
 	ingredient: IngredientData,
 	slot_index: int,
-	parrot_doubled: bool = false
+	_parrot_doubled: bool = false
 ) -> void:
 	if ingredient == null:
 		return
@@ -298,7 +298,7 @@ func _on_hand_card_played(
 func _on_ingredient_drawn(
 	ctx: BrewContext,
 	ingredient: IngredientData,
-	parrot_doubled: bool = false
+	_parrot_doubled: bool = false
 ) -> void:
 	if ingredient == null:
 		return
@@ -1356,8 +1356,8 @@ func _present_card_stats_after_play(
 
 
 func _play_phoenix_save_presentation(
-	ingredient: IngredientData,
-	track_for_exit: bool,
+	_ingredient: IngredientData,
+	_track_for_exit: bool,
 	on_presented: Callable = Callable()
 ) -> void:
 	if GameManager.run == null:
@@ -1376,7 +1376,8 @@ func _play_phoenix_save_presentation(
 	_pulse_cauldron_for_phoenix_save()
 
 	var origin := _get_cauldron_effect_origin()
-	var presentation_finished := false
+	# Array wrapper so the lambda can mutate "finished" (GDScript lambdas cannot reassign outer locals).
+	var presentation_finished := [false]
 
 	session.set_presented_explosiveness(0)
 	session.complete_phoenix_save_presentation()
@@ -1384,9 +1385,9 @@ func _play_phoenix_save_presentation(
 	GameManager.brew_updated.emit(ctx)
 
 	var finish_presentation := func() -> void:
-		if presentation_finished:
+		if bool(presentation_finished[0]):
 			return
-		presentation_finished = true
+		presentation_finished[0] = true
 		_phoenix_save_presentation_active = false
 		session.set_phoenix_save_visual_active(false)
 		if _pending_finish_after_phoenix.is_valid():
