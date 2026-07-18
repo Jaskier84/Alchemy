@@ -28,26 +28,26 @@ func _hash11(p: float) -> float:
 	return fposmod(sin(p * 127.1) * 43758.5453, 1.0)
 
 
-func _bubble_life(time: float, seed: float) -> float:
-	var cycle_len := 2.8 + _hash11(seed * 11.3) * 4.8
-	var cycle := fmod(time / cycle_len + _hash11(seed * 9.73), 1.0)
-	var pop_len := 0.24 + _hash11(seed * 14.2) * 0.26
+func _bubble_life(time: float, seed_value: float) -> float:
+	var cycle_len := 2.8 + _hash11(seed_value * 11.3) * 4.8
+	var cycle := fmod(time / cycle_len + _hash11(seed_value * 9.73), 1.0)
+	var pop_len := 0.24 + _hash11(seed_value * 14.2) * 0.26
 	if cycle > pop_len:
 		return 0.0
 	var t := cycle / pop_len
 	return sin(t * PI)
 
 
-func _home_pixel(seed: float) -> Vector2:
-	var anchor_x := _hash11(seed * 2.11) - 0.5
-	var anchor_y := _hash11(seed * 3.07) - 0.5
+func _home_pixel(seed_value: float) -> Vector2:
+	var anchor_x := _hash11(seed_value * 2.11) - 0.5
+	var anchor_y := _hash11(seed_value * 3.07) - 0.5
 	var home := BOWL_CENTER + Vector2(anchor_x, anchor_y) * BOWL_RADIUS * 1.85
 	return Vector2(home.x * RECT_SIZE.x, home.y * RECT_SIZE.y)
 
 
-func _bubble_life_scaled(time: float, seed: float, activity: float) -> float:
+func _bubble_life_scaled(time: float, seed_value: float, activity: float) -> float:
 	var time_scale := lerpf(1.0, 2.8, activity)
-	return _bubble_life(time * time_scale, seed)
+	return _bubble_life(time * time_scale, seed_value)
 
 
 func _process(_delta: float) -> void:
@@ -61,12 +61,12 @@ func _process(_delta: float) -> void:
 
 	for layer in 3:
 		for i in bubble_count:
-			var seed := float(i + layer * 97)
-			var life := _bubble_life_scaled(time, seed, activity)
-			var key := str(seed)
+			var seed_value := float(i + layer * 97)
+			var life := _bubble_life_scaled(time, seed_value, activity)
+			var key := str(seed_value)
 			var prev: float = _last_life.get(key, 0.0)
 			if prev < 0.12 and life >= 0.12:
-				var size_roll := _hash11(seed * 4.19)
+				var size_roll := _hash11(seed_value * 4.19)
 				if size_roll > spawn_threshold:
-					_spawner.spawn_at_pop(_home_pixel(seed), size_roll, activity)
+					_spawner.spawn_at_pop(_home_pixel(seed_value), size_roll, activity)
 			_last_life[key] = life

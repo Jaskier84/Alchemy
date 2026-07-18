@@ -8,7 +8,6 @@ const PULSE_DURATION := 0.85
 
 @onready var _pulse_container: Control = $PulseContainer
 @onready var _liquid: TextureRect = $PulseContainer/FlaskAspect/FlaskLiquid
-@onready var _frame: TextureRect = $PulseContainer/FlaskAspect/FlaskFrame
 @onready var _score_label: Label = $PulseContainer/ScoreLabel
 @onready var _complete_label: Label = $PulseContainer/CompleteLabel
 @onready var _spawner: Node2D = $PulseContainer/FlaskAspect/FlaskLiquid/EscapeBubbleSpawner

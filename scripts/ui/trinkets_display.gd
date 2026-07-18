@@ -9,7 +9,6 @@ const MIN_ICON_SIZE := 24.0
 const GRID_GAP := 4.0
 
 @onready var _grid: GridContainer = $IconGrid
-@onready var _tooltip_layer: CanvasLayer = $TooltipLayer
 @onready var _tooltip: TrinketTooltip = $TooltipLayer/TrinketTooltip
 
 var _icon_pool: Array[TrinketIcon] = []

@@ -195,7 +195,10 @@ func bind_hand_card(
 	display_explosive_value: int = -1,
 	effect_entries: Array = []
 ) -> void:
+	# Preserve external strip mode — player hand uses a shared icon layer above cards.
+	var keep_external_icon_strip := _external_icon_strip
 	_reset_mode_flags()
+	_external_icon_strip = keep_external_icon_strip
 	_hand_mode = true
 	_hand_slot_index = slot_index
 	_hand_drag_enabled = drag_enabled

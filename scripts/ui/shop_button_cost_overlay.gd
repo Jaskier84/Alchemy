@@ -8,7 +8,6 @@ const _BOLD_TEXT_COLOR := Color(0, 0, 0, 1)
 @export var font_size: int = 26
 @export var outline_size: int = 2
 
-@onready var _icon: TextureRect = $CoinIcon
 @onready var _label: Label = $AmountLabel
 
 

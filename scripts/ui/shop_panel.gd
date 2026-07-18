@@ -366,15 +366,16 @@ func _await_boss_boom_berry_fly(
 	if not is_inside_tree() or not visible:
 		return false
 
-	var fly_finished := false
+	# Array wrapper so the lambda can mutate finished state.
+	var fly_finished := [false]
 	_spawn_boss_boom_berry_fly(
 		texture,
 		start_center,
 		target_center,
 		func() -> void:
-			fly_finished = true
+			fly_finished[0] = true
 	)
-	while not fly_finished:
+	while not bool(fly_finished[0]):
 		if not is_inside_tree() or not visible:
 			return false
 		await get_tree().process_frame

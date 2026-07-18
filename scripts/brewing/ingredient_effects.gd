@@ -401,7 +401,7 @@ static func resolve_hand_play_cobbler(
 
 
 static func _apply_resolved_cobbler_bonus(
-	ingredient: IngredientData,
+	_ingredient: IngredientData,
 	result: EffectResult,
 	resolved: Dictionary
 ) -> void:
@@ -816,7 +816,7 @@ static func compute_hand_display_stats(
 			last_hand_slot = play_slot
 			last_hand_ingredient = ingredient
 			continue
-		var cauldron_count := int(step.get("cauldron_count_before", sim_cauldron.size()))
+		var _cauldron_count := int(step.get("cauldron_count_before", sim_cauldron.size()))
 		if parrot_doubles_next:
 			parrot_doubles_next = false
 		var point_value := ingredient.point_value
@@ -934,7 +934,7 @@ static func compute_hand_display_stats(
 static func compute_immediate_cauldron_play_preview(
 	ingredient: IngredientData,
 	cauldron_contents: Array,
-	aura: AuraData,
+	_aura: AuraData,
 	play_slot: int,
 	hand_slots: Array,
 	last_hand_slot: int,

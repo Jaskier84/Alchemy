@@ -102,10 +102,10 @@ func _hash11(p: float) -> float:
 	return fposmod(sin(p * 127.1) * 43758.5453, 1.0)
 
 
-func _bubble_life(time: float, seed: float) -> float:
-	var cycle_len := 2.8 + _hash11(seed * 11.3) * 4.8
-	var cycle := fmod(time / cycle_len + _hash11(seed * 9.73), 1.0)
-	var pop_len := 0.24 + _hash11(seed * 14.2) * 0.26
+func _bubble_life(time: float, seed_value: float) -> float:
+	var cycle_len := 2.8 + _hash11(seed_value * 11.3) * 4.8
+	var cycle := fmod(time / cycle_len + _hash11(seed_value * 9.73), 1.0)
+	var pop_len := 0.24 + _hash11(seed_value * 14.2) * 0.26
 	if cycle > pop_len:
 		return 0.0
 	var t := cycle / pop_len
@@ -128,12 +128,12 @@ func _texture_to_control_uv(texture_uv_coord: Vector2) -> Vector2:
 	)
 
 
-func _home_pixel(seed: float, fill_level: float) -> Vector2:
-	var anchor_x := _hash11(seed * 2.11) - 0.5
+func _home_pixel(seed_value: float, fill_level: float) -> Vector2:
+	var anchor_x := _hash11(seed_value * 2.11) - 0.5
 	var meniscus_y := _meniscus_uv(fill_level)
 	var bottom := float(_metrics.get("interior_bottom", 0.947))
 	var fill_span := maxf(0.001, bottom - meniscus_y)
-	var depth_roll := _hash11(seed * 3.07)
+	var depth_roll := _hash11(seed_value * 3.07)
 	var center_x := float(_metrics.get("center_x", 0.5))
 	var half_w := float(_metrics.get("half_width", 0.109))
 	var width_scale := lerpf(0.5, 1.0, sqrt(depth_roll))
@@ -161,12 +161,12 @@ func _process(_delta: float) -> void:
 	var time := Time.get_ticks_msec() * 0.001
 	for layer in 3:
 		for i in 22:
-			var seed := float(i + layer * 97)
-			var life := _bubble_life(time, seed)
-			var key := str(seed)
+			var seed_value := float(i + layer * 97)
+			var life := _bubble_life(time, seed_value)
+			var key := str(seed_value)
 			var prev: float = _last_life.get(key, 0.0)
 			if prev < 0.12 and life >= 0.12:
-				var size_roll := _hash11(seed * 4.19)
+				var size_roll := _hash11(seed_value * 4.19)
 				if size_roll > 0.35:
-					_spawner.spawn_at_pop(_home_pixel(seed, fill_level), size_roll)
+					_spawner.spawn_at_pop(_home_pixel(seed_value, fill_level), size_roll)
 			_last_life[key] = life
