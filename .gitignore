@@ -28,6 +28,11 @@ Thumbs.db
 *.log
 godot.log
 
+# Local scratch / AI session assets (not part of the game)
+Images for grok/
+images/
+tools/_probe_*.gd
+tools/_sync_xlsx_session_updates.py
 # Artist rework staging (local only; keep out of GitHub)
 Reworked assets/
 reworked assets/
