@@ -5,6 +5,7 @@ signal selected(trinket: TrinketData)
 
 const _ART_PATH_TEMPLATE := "res://assets/cards/trinkets/%s.png"
 
+@onready var _icon_frame: Control = $MarginContainer/Column/IconFrame
 @onready var _icon: TextureRect = $MarginContainer/Column/IconFrame/Icon
 @onready var _fallback: Panel = $MarginContainer/Column/IconFrame/Fallback
 @onready var _name_label: Label = $MarginContainer/Column/NameLabel
@@ -21,6 +22,29 @@ func _ready() -> void:
 	_pass_mouse_input_to_root(self)
 	if not gui_input.is_connected(_on_gui_input):
 		gui_input.connect(_on_gui_input)
+
+
+func set_compact_layout(icon_size: Vector2) -> void:
+	# Shrink option art so bag + lives fit in the trinket reward HUD.
+	if _icon_frame != null:
+		_icon_frame.custom_minimum_size = Vector2(0.0, icon_size.y)
+	if _icon != null:
+		var half := icon_size * 0.5
+		_icon.offset_left = -half.x
+		_icon.offset_top = -half.y
+		_icon.offset_right = half.x
+		_icon.offset_bottom = half.y
+	if _fallback != null:
+		var fallback_half := icon_size * 0.38
+		_fallback.offset_left = -fallback_half.x
+		_fallback.offset_top = -fallback_half.y
+		_fallback.offset_right = fallback_half.x
+		_fallback.offset_bottom = fallback_half.y
+	if _name_label != null:
+		_name_label.add_theme_font_size_override("font_size", 22)
+	if _description_label != null:
+		_description_label.add_theme_font_size_override("normal_font_size", 16)
+		_description_label.custom_minimum_size = Vector2(0.0, 72.0)
 
 
 func _pass_mouse_input_to_root(node: Node) -> void:

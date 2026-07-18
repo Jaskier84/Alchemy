@@ -4,11 +4,17 @@ extends CanvasLayer
 const _OPTION_SCENE := preload("res://scenes/ui/trinket_reward_option.tscn")
 const _IngredientFlyUtil := preload("res://scripts/ui/ingredient_fly_util.gd")
 const FLY_ART_SIZE := Vector2(96.0, 96.0)
+const BAG_BUTTON_SIZE := Vector2(52.0, 52.0)
+const OPTION_MIN_SIZE := Vector2(200.0, 340.0)
+const OPTION_ICON_SIZE := Vector2(180.0, 180.0)
 
 @onready var _overlay_root: Control = $OverlayRoot
 @onready var _input_blocker: ColorRect = $OverlayRoot/InputBlocker
 @onready var _title_label: Label = $OverlayRoot/Panel/Content/Title
 @onready var _options_row: HBoxContainer = $OverlayRoot/Panel/Content/OptionsRow
+@onready var _bag_button: IngredientBagButton = $OverlayRoot/TopRightHud/BagButton
+@onready var _lives_display: LivesDisplay = $OverlayRoot/TopRightHud/LivesDisplay
+@onready var _bag_contents: BagContentsOverlay = $BagContentsOverlay
 @onready var _fly_layer: CanvasLayer = $FlyLayer
 
 var _option_nodes: Array[TrinketRewardOption] = []
@@ -18,6 +24,8 @@ var _selection_locked := false
 func _ready() -> void:
 	visible = false
 	_set_input_enabled(false)
+	_configure_bag_button()
+	_wire_bag_controls()
 	_build_option_slots()
 
 
@@ -26,18 +34,40 @@ func show_offers(trinkets: Array) -> void:
 	if _title_label != null:
 		_title_label.text = "Choose a Trinket"
 	_bind_offers(trinkets)
+	if _bag_contents != null:
+		_bag_contents.hide_overlay()
 	visible = true
 	_set_input_enabled(true)
+	_set_options_selectable(true)
 
 
 func hide_overlay() -> void:
 	visible = false
 	_set_input_enabled(false)
 	_selection_locked = false
+	if _bag_contents != null:
+		_bag_contents.hide_overlay()
 	for option in _option_nodes:
 		if option != null:
 			option.set_selectable(true)
 			option.modulate = Color.WHITE
+
+
+func _configure_bag_button() -> void:
+	if _bag_button == null:
+		return
+	_bag_button.custom_minimum_size = BAG_BUTTON_SIZE
+	_bag_button.size = BAG_BUTTON_SIZE
+	_bag_button.label_text = ""
+	_bag_button.ignore_texture_size = true
+	_bag_button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+
+
+func _wire_bag_controls() -> void:
+	if _bag_button != null and not _bag_button.pressed.is_connected(_on_bag_button_pressed):
+		_bag_button.pressed.connect(_on_bag_button_pressed)
+	if _bag_contents != null and not _bag_contents.overlay_closed.is_connected(_on_bag_contents_closed):
+		_bag_contents.overlay_closed.connect(_on_bag_contents_closed)
 
 
 func _set_input_enabled(enabled: bool) -> void:
@@ -61,8 +91,11 @@ func _build_option_slots() -> void:
 		if option == null:
 			continue
 		_options_row.add_child(option)
+		option.custom_minimum_size = OPTION_MIN_SIZE
 		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		option.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		if option.has_method("set_compact_layout"):
+			option.set_compact_layout(OPTION_ICON_SIZE)
 		if not option.selected.is_connected(_on_option_selected):
 			option.selected.connect(_on_option_selected)
 		_option_nodes.append(option)
@@ -83,8 +116,28 @@ func _bind_offers(trinkets: Array) -> void:
 			option.bind(null)
 
 
+func _on_bag_button_pressed() -> void:
+	if _selection_locked or GameManager.run == null or _bag_contents == null:
+		return
+	_bag_contents.toggle(GameManager.run.bag)
+	_set_options_selectable(not _bag_contents.is_open())
+
+
+func _on_bag_contents_closed() -> void:
+	if not _selection_locked:
+		_set_options_selectable(true)
+
+
+func _set_options_selectable(enabled: bool) -> void:
+	for option in _option_nodes:
+		if option != null:
+			option.set_selectable(enabled and not _selection_locked)
+
+
 func _on_option_selected(trinket: TrinketData) -> void:
 	if _selection_locked or trinket == null:
+		return
+	if _bag_contents != null and _bag_contents.is_open():
 		return
 	_selection_locked = true
 	_set_input_enabled(false)
@@ -135,7 +188,7 @@ func _play_beating_heart_life_gain(
 	lives_after: int,
 	boom_berry_start: Vector2
 ) -> void:
-	var lives_display := _find_brew_lives_display()
+	var lives_display := _get_lives_display()
 	if (
 		lives_display == null
 		or lives_after <= lives_before
@@ -154,7 +207,7 @@ func _play_beating_heart_life_gain(
 
 func _play_beating_heart_boom_berry_fly(start_center: Vector2) -> void:
 	var texture := _load_boom_berry_texture()
-	var target_center := _find_brew_bag_center()
+	var target_center := _get_bag_center()
 	if texture == null or target_center == Vector2.ZERO:
 		_finish_beating_heart_reward()
 		return
@@ -178,13 +231,15 @@ func _finish_beating_heart_reward() -> void:
 func _unlock_selection() -> void:
 	_selection_locked = false
 	_set_input_enabled(true)
+	_set_options_selectable(true)
 	for option in _option_nodes:
 		if option != null:
-			option.set_selectable(true)
 			option.modulate = Color.WHITE
 
 
-func _find_brew_lives_display() -> LivesDisplay:
+func _get_lives_display() -> LivesDisplay:
+	if _lives_display != null:
+		return _lives_display
 	var hud := get_parent()
 	if hud == null:
 		return null
@@ -192,7 +247,9 @@ func _find_brew_lives_display() -> LivesDisplay:
 	return lives_node as LivesDisplay
 
 
-func _find_brew_bag_center() -> Vector2:
+func _get_bag_center() -> Vector2:
+	if _bag_button != null:
+		return _IngredientFlyUtil.global_control_center(_bag_button)
 	var hud := get_parent()
 	if hud == null:
 		return Vector2.ZERO
