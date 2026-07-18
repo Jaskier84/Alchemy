@@ -16,6 +16,8 @@ const GRID_COLUMNS := 5
 const _PANEL_DEFAULT_ANCHOR_RIGHT := 0.58
 const _PANEL_DEV_TRINKET_ANCHOR_LEFT := 0.22
 const _PANEL_DEV_TRINKET_ANCHOR_RIGHT := 0.78
+const _DEFAULT_PREVIEW_LAYER := 60
+const _DEFAULT_COUNT_LAYER := 61
 
 @onready var _input_blocker: ColorRect = $InputBlocker
 @onready var _panel: PanelContainer = $Panel
@@ -281,12 +283,28 @@ func refresh_if_open() -> void:
 
 func _open() -> void:
 	_apply_panel_layout_for_mode()
+	_sync_floating_layer_order()
 	_rebuild_grid()
 	visible = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_process(true)
 	_configure_mode_input()
 	_hide_preview()
+
+
+func _sync_floating_layer_order() -> void:
+	# Nested CanvasLayers use absolute viewport layers. Raise previews above any
+	# parent overlay (e.g. boss trinket reward at layer 110).
+	var base_layer := _DEFAULT_PREVIEW_LAYER
+	var node: Node = self
+	while node != null:
+		if node is CanvasLayer:
+			base_layer = maxi(base_layer, (node as CanvasLayer).layer + 2)
+		node = node.get_parent()
+	if _preview_layer != null:
+		_preview_layer.layer = base_layer
+	if _count_overlay_layer != null:
+		_count_overlay_layer.layer = base_layer + 1
 
 
 func _configure_mode_input() -> void:

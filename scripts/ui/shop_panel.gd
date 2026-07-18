@@ -21,7 +21,7 @@ const BAG_HOVER_SCALE_SPEED := 12.0
 @onready var leave_shop_button: WoodenButton = $LeaveShopButton
 @onready var _fly_layer: CanvasLayer = $FlyLayer
 @onready var _shop_select_pop_player: AudioStreamPlayer = $ShopSelectPopPlayer
-@onready var _boom_berry_reward_note: Label = $BagTarget/BoomBerryRewardNote
+@onready var _boom_berry_reward_note: Label = $BoomBerryRewardNote
 @onready var _bag_target: Control = $BagTarget
 @onready var _bag_button: TextureButton = $BagTarget/BagButton
 @onready var _bag_count_label: Label = $BagCountLabel
@@ -429,6 +429,25 @@ func _show_boom_berry_reward_note(rewards: Array[IngredientData]) -> void:
 	_boom_berry_reward_note.text = _format_boom_berry_reward_note(rewards)
 	_boom_berry_reward_note.modulate = Color.WHITE
 	_boom_berry_reward_note.visible = true
+	# Keep note outside BagTarget so bag hover-scale does not move the text.
+	call_deferred("_align_boom_berry_reward_note")
+
+
+func _align_boom_berry_reward_note() -> void:
+	if _boom_berry_reward_note == null or not _boom_berry_reward_note.visible:
+		return
+	var bag_rect := _get_bag_button_rest_global_rect()
+	if bag_rect.size == Vector2.ZERO:
+		return
+	var note_size := _boom_berry_reward_note.size
+	if note_size.x <= 1.0 or note_size.y <= 1.0:
+		note_size = _boom_berry_reward_note.get_combined_minimum_size()
+		if note_size.x <= 1.0:
+			note_size = Vector2(440.0, 76.0)
+	var top := bag_rect.position.y - note_size.y - 12.0
+	var left := bag_rect.get_center().x - note_size.x * 0.5
+	_boom_berry_reward_note.global_position = Vector2(left, top)
+	_boom_berry_reward_note.size = note_size
 
 
 func _format_boom_berry_reward_note(rewards: Array[IngredientData]) -> String:
