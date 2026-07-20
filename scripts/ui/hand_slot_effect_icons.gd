@@ -55,7 +55,8 @@ func bind_entries(entries: Array, ingredient_lookup: Callable) -> void:
 
 func clear_icons() -> void:
 	for icon in _icon_pool:
-		icon.visible = false
+		if icon != null:
+			icon.visible = false
 	visible = false
 
 
