@@ -1,30 +1,32 @@
 class_name CookbookEntry
 extends Control
-## Cookbook cell: full ingredient card if discovered, flat black silhouette if locked.
+## Compact cookbook tile: art/silhouette only. Full scroll preview is owned by the overlay.
 
-const _CARD_SCENE := preload("res://scenes/ui/ingredient_card.tscn")
 const _ART_PATH_TEMPLATE := "res://assets/cards/ingredients/%s.png"
 
-## About half the previous cookbook cell / roughly half of hand-card display.
-const CARD_SCALE := 0.17
-const CARD_BASE_SIZE := Vector2(300.0, 420.0)
-const ENTRY_SIZE := CARD_BASE_SIZE * CARD_SCALE
-const HOVER_SCALE := 1.12
+const DEFAULT_ENTRY_SIZE := Vector2(88.0, 88.0)
+const HOVER_SCALE := 1.14
 const HOVER_SPEED := 12.0
+
+## Shared across all entries — avoid reloading the same PNG dozens of times per open.
+static var _art_texture_cache: Dictionary = {}  # path -> Texture2D
+
+signal hover_started(entry: CookbookEntry)
+signal hover_ended(entry: CookbookEntry)
 
 var _ingredient: IngredientData
 var _discovered: bool = false
-var _card: IngredientCard
-var _silhouette: TextureRect
+var _art: TextureRect
 var _base_scale := Vector2.ONE
-var _hovering := false
+var _entry_size := DEFAULT_ENTRY_SIZE
 
 
 func _ready() -> void:
-	custom_minimum_size = ENTRY_SIZE
-	size = ENTRY_SIZE
+	_ensure_art_node()
+	_apply_size(_entry_size)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	pivot_offset = ENTRY_SIZE * 0.5
+	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_base_scale = scale
 	if not mouse_entered.is_connected(_on_mouse_entered):
 		mouse_entered.connect(_on_mouse_entered)
@@ -43,94 +45,97 @@ func bind(ingredient: IngredientData, discovered: bool) -> void:
 		call_deferred("_refresh")
 
 
+func set_discovered(discovered: bool) -> void:
+	if _discovered == discovered:
+		return
+	_discovered = discovered
+	if is_node_ready():
+		_apply_discovered_visual()
+
+
+func apply_tile_size(tile_size: Vector2) -> void:
+	if _entry_size.is_equal_approx(tile_size):
+		return
+	_entry_size = tile_size
+	_apply_size(tile_size)
+
+
+func get_ingredient() -> IngredientData:
+	return _ingredient
+
+
+func is_discovered() -> bool:
+	return _discovered
+
+
+func get_art_center_global() -> Vector2:
+	if _art != null and is_instance_valid(_art):
+		return _art.get_global_rect().get_center()
+	return get_global_rect().get_center()
+
+
+func _apply_size(tile_size: Vector2) -> void:
+	custom_minimum_size = tile_size
+	size = tile_size
+	pivot_offset = tile_size * 0.5
+
+
+func _ensure_art_node() -> void:
+	if _art != null and is_instance_valid(_art):
+		return
+	_art = TextureRect.new()
+	_art.name = "Art"
+	_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_art.offset_left = 4.0
+	_art.offset_top = 4.0
+	_art.offset_right = -4.0
+	_art.offset_bottom = -4.0
+	add_child(_art)
+
+
 func _refresh() -> void:
 	if _ingredient == null:
 		return
-	custom_minimum_size = ENTRY_SIZE
-	size = ENTRY_SIZE
-	pivot_offset = ENTRY_SIZE * 0.5
-	_clear_visuals()
-	if _discovered:
-		_show_discovered_card()
-	else:
-		_show_locked_silhouette()
+	_ensure_art_node()
+	_apply_size(_entry_size)
+	_art.texture = _load_art_cached(_ingredient)
+	_apply_discovered_visual()
 
 
-func _clear_visuals() -> void:
-	if _card != null and is_instance_valid(_card):
-		_card.queue_free()
-	_card = null
-	if _silhouette != null and is_instance_valid(_silhouette):
-		_silhouette.queue_free()
-	_silhouette = null
-
-
-func _show_discovered_card() -> void:
-	_card = _CARD_SCENE.instantiate() as IngredientCard
-	if _card == null:
+func _apply_discovered_visual() -> void:
+	if _art == null:
 		return
-	add_child(_card)
-	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_card.focus_mode = Control.FOCUS_NONE
-	_card.disabled = true
-	_card.set_external_icon_strip(true)
-	_card.bind_preview(_ingredient)
-	# Same full parchment scroll layout as hand/preview cards, scaled down.
-	_card.scale = Vector2.ONE * CARD_SCALE
-	_card.position = Vector2.ZERO
-	_card.pivot_offset = Vector2.ZERO
+	if _discovered:
+		# Full-color art.
+		_art.modulate = Color.WHITE
+	else:
+		# Flat black silhouette via modulate — keeps alpha, no per-pixel CPU work.
+		_art.modulate = Color(0, 0, 0, 1)
 
 
-func _show_locked_silhouette() -> void:
-	var texture := _load_flat_black_silhouette(_ingredient)
-	_silhouette = TextureRect.new()
-	_silhouette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_silhouette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_silhouette.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_silhouette.texture = texture
-	_silhouette.modulate = Color(0, 0, 0, 1)
-	_silhouette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_silhouette.offset_left = 8.0
-	_silhouette.offset_top = 8.0
-	_silhouette.offset_right = -8.0
-	_silhouette.offset_bottom = -8.0
-	add_child(_silhouette)
-
-
-func _load_flat_black_silhouette(ingredient: IngredientData) -> Texture2D:
+func _load_art_cached(ingredient: IngredientData) -> Texture2D:
 	var art_path := _ART_PATH_TEMPLATE % ingredient.get_art_filename()
+	if _art_texture_cache.has(art_path):
+		return _art_texture_cache[art_path] as Texture2D
 	if not ResourceLoader.exists(art_path):
+		_art_texture_cache[art_path] = null
 		return null
-	var source := load(art_path) as Texture2D
-	if source == null:
-		return null
-	var image := source.get_image()
-	if image == null or image.is_empty():
-		return source
-	if image.is_compressed():
-		image = image.duplicate()
-		image.decompress()
-	if image.get_format() != Image.FORMAT_RGBA8:
-		image.convert(Image.FORMAT_RGBA8)
-	# Flatten to solid black wherever there is opacity — barely recognizable shape.
-	for y in image.get_height():
-		for x in image.get_width():
-			var c := image.get_pixel(x, y)
-			if c.a > 0.08:
-				image.set_pixel(x, y, Color(0, 0, 0, 1))
-			else:
-				image.set_pixel(x, y, Color(0, 0, 0, 0))
-	return ImageTexture.create_from_image(image)
+	var tex := load(art_path) as Texture2D
+	_art_texture_cache[art_path] = tex
+	return tex
 
 
 func _on_mouse_entered() -> void:
-	_hovering = true
 	_tween_scale(_base_scale * HOVER_SCALE)
+	hover_started.emit(self)
 
 
 func _on_mouse_exited() -> void:
-	_hovering = false
 	_tween_scale(_base_scale)
+	hover_ended.emit(self)
 
 
 func _tween_scale(target: Vector2) -> void:

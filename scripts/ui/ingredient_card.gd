@@ -776,11 +776,11 @@ func _sync_puzzle_input() -> void:
 		_puzzle_press_position = Vector2.INF
 
 
-func bind_preview(ingredient: IngredientData) -> void:
+func bind_preview(ingredient: IngredientData, show_shop_cost: bool = false) -> void:
 	if is_queued_for_deletion():
 		return
 	if not is_node_ready():
-		call_deferred("bind_preview", ingredient)
+		call_deferred("bind_preview", ingredient, show_shop_cost)
 		return
 	if ingredient == null:
 		_set_empty_state()
@@ -790,7 +790,7 @@ func bind_preview(ingredient: IngredientData) -> void:
 		_slot_index = -1
 	_is_animating = false
 	_ingredient = ingredient
-	_price = 0
+	_price = ingredient.shop_cost if show_shop_cost else 0
 	_has_offer = true
 	_base_point_value = ingredient.point_value
 	_base_explosive_value = ingredient.explosive_value
@@ -816,7 +816,11 @@ func bind_preview(ingredient: IngredientData) -> void:
 		else:
 			_explosive_value.text = ""
 			$VisualRoot/StatsRow/ExplosiveStat.visible = false
-	_set_cost_row_visible(false)
+	if show_shop_cost:
+		_cost_label.text = "%d" % ingredient.shop_cost
+		_set_cost_row_visible(true)
+	else:
+		_set_cost_row_visible(false)
 	_apply_rarity_tint(ingredient.rarity)
 	_apply_ingredient_art(ingredient)
 	if _hand_mode:

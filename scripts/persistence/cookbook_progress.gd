@@ -71,6 +71,11 @@ static func all_discovered_ids() -> Array[String]:
 	return ids
 
 
+static func discovered_count() -> int:
+	_ensure_loaded()
+	return _discovered.size()
+
+
 static func _ensure_loaded() -> void:
 	if _loaded:
 		return

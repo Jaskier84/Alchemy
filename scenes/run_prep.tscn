@@ -1,8 +1,11 @@
-[gd_scene load_steps=4 format=3 uid="uid://runprepscene01"]
+[gd_scene load_steps=7 format=3 uid="uid://runprepscene01"]
 
 [ext_resource type="Script" path="res://scripts/ui/run_prep.gd" id="1_script"]
 [ext_resource type="PackedScene" uid="uid://runpreppanel01" path="res://scenes/ui/run_prep_panel.tscn" id="2_panel"]
 [ext_resource type="PackedScene" uid="uid://settingsgearbtn01" path="res://scenes/ui/settings_gear_button.tscn" id="3_settings_gear"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cookbook_button.tscn" id="4_cookbook_button"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cookbook_overlay.tscn" id="5_cookbook_overlay"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cursor_tooltip.tscn" id="6_cursor_tooltip"]
 
 [node name="RunPrep" type="Control"]
 layout_mode = 3
@@ -32,3 +35,19 @@ offset_right = -4.0
 offset_bottom = 36.0
 grow_horizontal = 0
 z_index = 30
+
+[node name="CookbookButton" parent="." instance=ExtResource("4_cookbook_button")]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -36.0
+offset_top = 40.0
+offset_right = -4.0
+offset_bottom = 72.0
+grow_horizontal = 0
+z_index = 30
+
+[node name="CookbookOverlay" parent="." instance=ExtResource("5_cookbook_overlay")]
+
+[node name="CursorTooltip" parent="." instance=ExtResource("6_cursor_tooltip")]

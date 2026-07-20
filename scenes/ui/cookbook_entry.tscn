@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/ui/cookbook_entry.gd" id="1_script"]
 
 [node name="CookbookEntry" type="Control"]
-custom_minimum_size = Vector2(51, 71)
+custom_minimum_size = Vector2(88, 88)
 layout_mode = 2
 mouse_filter = 0
 script = ExtResource("1_script")
