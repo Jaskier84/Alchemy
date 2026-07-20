@@ -80,9 +80,9 @@ vertical_scroll_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme_override_constants/h_separation = 10
-theme_override_constants/v_separation = 10
-columns = 5
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 8
 
 [node name="CloseButton" type="Button" parent="OverlayRoot/Panel/Content"]
 custom_minimum_size = Vector2(140, 40)

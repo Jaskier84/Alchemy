@@ -4,7 +4,7 @@ extends CanvasLayer
 
 const _ENTRY_SCENE := preload("res://scenes/ui/cookbook_entry.tscn")
 const _CookbookProgress := preload("res://scripts/persistence/cookbook_progress.gd")
-const GRID_COLUMNS := 5
+const GRID_COLUMNS := 8
 
 @onready var _root: Control = $OverlayRoot
 @onready var _input_blocker: ColorRect = $OverlayRoot/InputBlocker
