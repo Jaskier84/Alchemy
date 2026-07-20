@@ -1,0 +1,7 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/cursor_tooltip.gd" id="1_script"]
+
+[node name="CursorTooltip" type="CanvasLayer"]
+layer = 200
+script = ExtResource("1_script")

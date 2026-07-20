@@ -32,6 +32,9 @@
 [ext_resource type="PackedScene" uid="uid://settingsgearbtn01" path="res://scenes/ui/settings_gear_button.tscn" id="30_settings_gear"]
 [ext_resource type="Texture2D" path="res://assets/sprites/hand_undo_button.png" id="32_hand_undo_tex"]
 [ext_resource type="Texture2D" path="res://assets/sprites/hand_mulligan_button.png" id="33_hand_mulligan_tex"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cookbook_button.tscn" id="34_cookbook_button"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cookbook_overlay.tscn" id="35_cookbook_overlay"]
+[ext_resource type="PackedScene" path="res://scenes/ui/cursor_tooltip.tscn" id="36_cursor_tooltip"]
 
 [node name="Game" type="Control" unique_id=403037050]
 custom_minimum_size = Vector2(1024, 576)
@@ -74,6 +77,21 @@ offset_right = -4.0
 offset_bottom = 36.0
 grow_horizontal = 0
 z_index = 30
+
+[node name="CookbookButton" parent="HudOverlayLayer" instance=ExtResource("34_cookbook_button")]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -36.0
+offset_top = 40.0
+offset_right = -4.0
+offset_bottom = 72.0
+grow_horizontal = 0
+z_index = 30
+
+[node name="CookbookOverlay" parent="HudOverlayLayer" instance=ExtResource("35_cookbook_overlay")]
+
+[node name="CursorTooltip" parent="HudOverlayLayer" instance=ExtResource("36_cursor_tooltip")]
 
 [node name="BagRemainingCountLabel" type="Label" parent="HudOverlayLayer"]
 visible = false

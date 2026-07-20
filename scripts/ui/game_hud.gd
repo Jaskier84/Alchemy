@@ -25,6 +25,10 @@ const _PhaseSwipeTransition := preload("res://scripts/ui/phase_swipe_transition.
 @onready var _game_over_stats: Label = $GameOverPanel/StatsLabel
 @onready var _add_ingredient_button: IngredientBagButton = $PhaseSwipeHost/BrewPanel/AddIngredientButton
 @onready var _bag_remaining_count_label: Label = $HudOverlayLayer/BagRemainingCountLabel
+@onready var _settings_gear_button: SettingsGearButton = $HudOverlayLayer/SettingsGearButton
+@onready var _cookbook_button: CookbookButton = $HudOverlayLayer/CookbookButton
+@onready var _cookbook_overlay: CookbookOverlay = $HudOverlayLayer/CookbookOverlay
+@onready var _cursor_tooltip: CursorTooltip = $HudOverlayLayer/CursorTooltip
 
 const BAG_REMAINING_COUNT_INSET := Vector2(0.0, 6.0)
 @onready var _save_and_quit_button: BaseButton = $PhaseSwipeHost/BrewPanel/SaveAndQuitButton
@@ -105,6 +109,7 @@ func _ready() -> void:
 			_brew_gold_reward_display
 		)
 
+	_wire_cookbook_and_tooltips()
 	call_deferred("_initialize_hud")
 	Settings.configure_music_player(_gameplay_music_player)
 	_start_gameplay_music()
@@ -112,11 +117,36 @@ func _ready() -> void:
 		_aura_description_rest_position = _aura_description_label.position
 
 
+func _wire_cookbook_and_tooltips() -> void:
+	if _cursor_tooltip != null:
+		if _settings_gear_button != null:
+			_settings_gear_button.tooltip_host = _cursor_tooltip
+			_settings_gear_button.tip_text = "Settings"
+		if _cookbook_button != null:
+			_cookbook_button.tooltip_host = _cursor_tooltip
+			_cookbook_button.tip_text = "Cookbook"
+	if _cookbook_button != null and not _cookbook_button.open_requested.is_connected(_on_cookbook_pressed):
+		_cookbook_button.open_requested.connect(_on_cookbook_pressed)
+
+
+func _on_cookbook_pressed() -> void:
+	if _cookbook_overlay == null:
+		return
+	if _cookbook_overlay.is_open():
+		_cookbook_overlay.hide_overlay()
+	else:
+		_cookbook_overlay.open_cookbook()
+
+
 func _initialize_hud() -> void:
 	_ensure_active_run()
 	_on_phase_changed(GameManager.current_phase)
 	_refresh_brew()
 	_refresh_bag_remaining_count()
+	if GameManager.run != null:
+		preload("res://scripts/persistence/cookbook_progress.gd").discover_from_bag(
+			GameManager.run.bag
+		)
 
 
 func _on_run_changed() -> void:

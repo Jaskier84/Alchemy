@@ -1,6 +1,8 @@
 class_name BagModel
 extends RefCounted
 
+const _CookbookProgress := preload("res://scripts/persistence/cookbook_progress.gd")
+
 var _master_chips: Array[IngredientData] = []
 var _working_chips: Array[IngredientData] = []
 var _forced_draw_queue: Array[IngredientData] = []
@@ -34,6 +36,7 @@ func add_to_master_bag(ingredient: IngredientData) -> bool:
 	if not can_add_to_master_bag(ingredient):
 		return false
 	_master_chips.append(_chip_for_bag(ingredient))
+	_CookbookProgress.discover_ingredient_data(ingredient)
 	return true
 
 
@@ -42,6 +45,7 @@ func force_add_to_master_bag(ingredient: IngredientData) -> bool:
 	if ingredient == null:
 		return false
 	_master_chips.append(_chip_for_bag(ingredient))
+	_CookbookProgress.discover_ingredient_data(ingredient)
 	return true
 
 

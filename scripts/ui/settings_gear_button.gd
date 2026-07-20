@@ -5,6 +5,9 @@ extends TextureButton
 const HOVER_SCALE := 1.08
 const SCALE_SPEED := 12.0
 
+@export var tooltip_host: CursorTooltip
+@export var tip_text: String = "Settings"
+
 var _base_scale := Vector2.ONE
 
 
@@ -81,14 +84,20 @@ func _on_mouse_entered() -> void:
 	if disabled:
 		return
 	_tween_scale(_base_scale * HOVER_SCALE)
+	if tooltip_host != null:
+		tooltip_host.show_tip(tip_text)
 
 
 func _on_mouse_exited() -> void:
 	_tween_scale(_base_scale)
+	if tooltip_host != null:
+		tooltip_host.hide_tip()
 
 
 func _on_pressed() -> void:
 	scale = _base_scale
+	if tooltip_host != null:
+		tooltip_host.hide_tip()
 	Settings.open()
 
 
