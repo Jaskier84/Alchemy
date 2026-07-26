@@ -31,6 +31,7 @@ var _preview_rest_position := Vector2.ZERO
 var _entry_size := Vector2(88.0, 88.0)
 var _grid_built: bool = false
 var _last_discovery_count: int = -1
+var _last_catalog_count: int = -1
 
 
 func _ready() -> void:
@@ -123,30 +124,55 @@ func _process(_delta: float) -> void:
 
 
 func _ensure_grid() -> void:
+	var ingredients := _load_catalog()
+	var catalog_count := ingredients.size()
 	var discovery_count := _CookbookProgress.discovered_count()
-	if _grid_built and _grid != null and _grid.get_child_count() > 0:
+	var child_count := _grid.get_child_count() if _grid != null else 0
+	# Rebuild when catalog grows (e.g. new ingredients) — discovery-only refresh
+	# cannot add missing tiles.
+	if (
+		_grid_built
+		and _grid != null
+		and child_count > 0
+		and child_count == catalog_count
+		and catalog_count == _last_catalog_count
+	):
 		if discovery_count != _last_discovery_count:
 			_refresh_discovery_states()
 			_last_discovery_count = discovery_count
 		return
-	_rebuild()
+	_rebuild_from_catalog(ingredients)
 	_last_discovery_count = discovery_count
+	_last_catalog_count = catalog_count
 
 
-func _rebuild() -> void:
-	_clear_grid()
-	_hide_preview()
-	if _grid == null:
-		return
+func _load_catalog() -> Array:
 	var ingredients: Array = []
 	if GameManager != null and GameManager.has_method("get_all_ingredients"):
 		ingredients = GameManager.get_all_ingredients()
 	else:
 		ingredients = DefaultContent.create().all_ingredients()
-	ingredients.sort_custom(_sort_ingredients)
+	var cleaned: Array = []
+	for item in ingredients:
+		if item != null and item is IngredientData:
+			cleaned.append(item)
+	cleaned.sort_custom(_sort_ingredients)
+	return cleaned
+
+
+func _rebuild() -> void:
+	_rebuild_from_catalog(_load_catalog())
+
+
+func _rebuild_from_catalog(ingredients: Array) -> void:
+	_clear_grid()
+	_hide_preview()
+	if _grid == null:
+		return
 	if _title_label != null:
 		_title_label.text = "Cookbook"
 	_compute_entry_size()
+	var added := 0
 	for item in ingredients:
 		if item == null or not (item is IngredientData):
 			continue
@@ -161,8 +187,10 @@ func _rebuild() -> void:
 			entry.hover_started.connect(_on_entry_hover_started)
 		if not entry.hover_ended.is_connected(_on_entry_hover_ended):
 			entry.hover_ended.connect(_on_entry_hover_ended)
+		added += 1
 	_force_grid_fill_width()
 	_grid_built = true
+	_last_catalog_count = added
 
 
 func _refresh_discovery_states() -> void:

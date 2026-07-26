@@ -109,6 +109,126 @@ static func _update_flyer(
 	flyer.scale = start_scale * shrink
 
 
+## Carving Knife + Pumpkin: both hop toward each other, transform into Jack-O-Lantern,
+## then fly into the cauldron.
+static func play_carving_combine(
+	layer: CanvasLayer,
+	left_texture: Texture2D,
+	right_texture: Texture2D,
+	jack_texture: Texture2D,
+	left_center: Vector2,
+	right_center: Vector2,
+	target_center: Vector2,
+	display_size: Vector2,
+	on_complete: Callable = Callable(),
+	on_arrival: Callable = Callable(),
+	duration: float = BREW_INGREDIENT_FLY_DURATION
+) -> void:
+	if layer == null or jack_texture == null:
+		if on_complete.is_valid():
+			on_complete.call()
+		return
+
+	var left_start := to_layer_position(layer, left_center)
+	var right_start := to_layer_position(layer, right_center)
+	var meet := (left_start + right_start) * 0.5 + Vector2(0.0, -HOP_HEIGHT * 0.55)
+	var layer_target := to_layer_position(layer, target_center)
+	var meet_duration := duration * 0.45
+	var transform_duration := duration * 0.2
+	var cauldron_duration := duration * 0.55
+
+	var left_flyer := _make_flyer(left_texture, display_size)
+	var right_flyer := _make_flyer(right_texture, display_size)
+	layer.add_child(left_flyer)
+	layer.add_child(right_flyer)
+	left_flyer.position = left_start
+	right_flyer.position = right_start
+	var left_scale := left_flyer.scale
+	var right_scale := right_flyer.scale
+
+	var meet_tween := layer.create_tween()
+	meet_tween.set_parallel(true)
+	meet_tween.tween_property(left_flyer, "position", meet + Vector2(-10.0, 0.0), meet_duration).set_trans(
+		Tween.TRANS_SINE
+	).set_ease(Tween.EASE_OUT)
+	meet_tween.tween_property(right_flyer, "position", meet + Vector2(10.0, 0.0), meet_duration).set_trans(
+		Tween.TRANS_SINE
+	).set_ease(Tween.EASE_OUT)
+
+	meet_tween.set_parallel(false)
+	meet_tween.tween_callback(
+		func() -> void:
+			if is_instance_valid(left_flyer):
+				var fade := left_flyer.create_tween()
+				fade.set_parallel(true)
+				fade.tween_property(left_flyer, "modulate:a", 0.0, transform_duration)
+				fade.tween_property(left_flyer, "scale", left_scale * 0.4, transform_duration)
+			if is_instance_valid(right_flyer):
+				var fade_r := right_flyer.create_tween()
+				fade_r.set_parallel(true)
+				fade_r.tween_property(right_flyer, "modulate:a", 0.0, transform_duration)
+				fade_r.tween_property(right_flyer, "scale", right_scale * 0.4, transform_duration)
+	)
+	meet_tween.tween_interval(transform_duration)
+	meet_tween.tween_callback(
+		func() -> void:
+			if is_instance_valid(left_flyer):
+				left_flyer.queue_free()
+			if is_instance_valid(right_flyer):
+				right_flyer.queue_free()
+			var jack := _make_flyer(jack_texture, display_size)
+			layer.add_child(jack)
+			jack.position = meet
+			jack.modulate.a = 0.0
+			var jack_scale := jack.scale
+			jack.scale = jack_scale * 0.45
+			var appear := jack.create_tween()
+			appear.set_parallel(true)
+			appear.tween_property(jack, "modulate:a", 1.0, transform_duration)
+			appear.tween_property(jack, "scale", jack_scale, transform_duration).set_trans(
+				Tween.TRANS_BACK
+			).set_ease(Tween.EASE_OUT)
+			appear.set_parallel(false)
+			appear.tween_callback(
+				func() -> void:
+					var fly := jack.create_tween()
+					fly.tween_method(
+						func(t: float) -> void:
+							_update_flyer(jack, meet, layer_target, jack_scale, t),
+						0.0,
+						1.0,
+						cauldron_duration
+					).set_trans(Tween.TRANS_LINEAR)
+					if on_arrival.is_valid():
+						var arrival := jack.create_tween()
+						arrival.tween_callback(on_arrival).set_delay(
+							cauldron_duration * ARRIVAL_FRACTION
+						)
+					fly.finished.connect(
+						func() -> void:
+							if is_instance_valid(jack):
+								jack.queue_free()
+							if on_complete.is_valid():
+								on_complete.call()
+					)
+			)
+	)
+
+
+static func _make_flyer(texture: Texture2D, display_size: Vector2) -> Sprite2D:
+	var flyer := Sprite2D.new()
+	flyer.texture = texture
+	flyer.centered = true
+	flyer.z_index = FLY_Z_INDEX
+	if texture != null:
+		var tex_size := texture.get_size()
+		if tex_size.x > 0.0 and tex_size.y > 0.0:
+			flyer.scale = Vector2(display_size.x / tex_size.x, display_size.y / tex_size.y)
+		else:
+			flyer.scale = Vector2.ONE
+	return flyer
+
+
 static func play_poof(
 	layer: CanvasLayer,
 	texture: Texture2D,

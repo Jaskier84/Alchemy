@@ -36,9 +36,12 @@ static func compute_steps(
 	var sim_cauldron: Array = cauldron_contents.duplicate()
 	var sim_ingredients_added := ingredients_added_before
 	var parrot_repeats_next := parrot_doubles_next
+	var carving_skip_slots: Dictionary = {}
 
 	for slot_index in range(hand_slot_count):
 		if honey_skipped.has(slot_index):
+			continue
+		if carving_skip_slots.has(slot_index):
 			continue
 		if slot_index >= hand_slots.size() or hand_slots[slot_index] == null:
 			continue
@@ -53,6 +56,38 @@ static func compute_steps(
 					"gecko_stays": true,
 				}
 			)
+			continue
+
+		# Carving Knife + Pumpkin adjacent: left slot plays as Jack-O-Lantern; right is consumed.
+		var carving_locked: Dictionary = honey_skipped.duplicate()
+		for gecko_slot in gecko_stayed.keys():
+			carving_locked[int(gecko_slot)] = true
+		var carving_partner := IngredientEffects.carving_partner_slot_to_right(
+			hand_slots,
+			slot_index,
+			carving_locked
+		)
+		if carving_partner >= 0:
+			carving_skip_slots[carving_partner] = true
+			ingredient = IngredientEffects.make_jackolantern_template()
+			sim_ingredients_added = _record_hand_slot_play(
+				steps,
+				slot_index,
+				ingredient,
+				sim_cauldron,
+				sim_ingredients_added,
+				aura,
+				owned_trinket_ids,
+				bat_wing_pick_overrides,
+				false,
+				false
+			)
+			# Tag the step for UI/debug (last recorded cauldron play for this slot).
+			if not steps.is_empty():
+				var last_step: Dictionary = steps[steps.size() - 1]
+				last_step["carving_combine"] = true
+				last_step["carving_partner_slot"] = carving_partner
+			parrot_repeats_next = false
 			continue
 
 		var parrot_repeat_this := parrot_repeats_next

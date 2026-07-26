@@ -287,10 +287,20 @@ func _on_hand_card_played(
 	GameManager.set_presentation_in_progress(true)
 	_sync_vengeful_fairy_counter()
 	_sync_hand_ui()
-	if _player_hand != null:
-		_player_hand.hide_slot_for_fly(slot_index)
 	var brew_ended := _ctx.outcome != BrewOutcome.Outcome.IN_PROGRESS
 	var session := GameManager.run.brew_session
+	var combine := session.consume_carving_combine_presentation()
+	if not combine.is_empty():
+		var left_slot := int(combine.get("left_slot", slot_index))
+		var right_slot := int(combine.get("right_slot", -1))
+		if _player_hand != null:
+			_player_hand.hide_slot_for_fly(left_slot)
+			if right_slot >= 0:
+				_player_hand.hide_slot_for_fly(right_slot)
+		_play_carving_combine_fly(combine, ingredient, brew_ended)
+		return
+	if _player_hand != null:
+		_player_hand.hide_slot_for_fly(slot_index)
 	var fly_count := session.last_play_fly_count
 	_play_hand_card_fly(ingredient, slot_index, brew_ended, fly_count)
 
@@ -1009,6 +1019,76 @@ func _play_hand_card_fly(
 ) -> void:
 	var fly_data := _hand_play_fly_data_for(ingredient, slot_index)
 	_play_cauldron_fly_with_data(fly_data, ingredient, track_for_exit, fly_count)
+
+
+func _play_carving_combine_fly(
+	combine: Dictionary,
+	jackolantern: IngredientData,
+	track_for_exit: bool
+) -> void:
+	var left_slot := int(combine.get("left_slot", -1))
+	var right_slot := int(combine.get("right_slot", -1))
+	var left_ing: IngredientData = combine.get("left_ingredient")
+	var right_ing: IngredientData = combine.get("right_ingredient")
+	var left_tex := _load_ingredient_texture(left_ing)
+	var right_tex := _load_ingredient_texture(right_ing)
+	var jack_tex := _load_ingredient_texture(jackolantern)
+	var left_center := (
+		_player_hand.get_slot_global_center(left_slot)
+		if _player_hand != null
+		else global_position
+	)
+	var right_center := (
+		_player_hand.get_slot_global_center(right_slot)
+		if _player_hand != null
+		else global_position
+	)
+	var left_fly := (
+		_player_hand.get_slot_fly_data(left_slot) if _player_hand != null else {}
+	)
+	var right_fly := (
+		_player_hand.get_slot_fly_data(right_slot) if _player_hand != null else {}
+	)
+	if left_fly.has("start_center"):
+		left_center = left_fly["start_center"]
+	if right_fly.has("start_center"):
+		right_center = right_fly["start_center"]
+	if left_fly.has("texture"):
+		left_tex = left_fly["texture"]
+	if right_fly.has("texture"):
+		right_tex = right_fly["texture"]
+	var display_size: Vector2 = FLY_ART_SIZE
+	if left_fly.has("size"):
+		display_size = left_fly["size"]
+	var target_center := (
+		_cauldron_target.get_global_rect().get_center()
+		if _cauldron_target != null
+		else global_position
+	)
+	if left_tex == null or right_tex == null or jack_tex == null or _fly_layer == null:
+		_play_hand_card_fly(jackolantern, left_slot, track_for_exit, 1)
+		return
+
+	if track_for_exit:
+		_brew_exit_animations_pending += 1
+
+	_IngredientFlyUtil.play_carving_combine(
+		_fly_layer,
+		left_tex,
+		right_tex,
+		jack_tex,
+		left_center,
+		right_center,
+		target_center,
+		display_size,
+		func() -> void:
+			_complete_card_fly_sequence(jackolantern, track_for_exit),
+		func() -> void:
+			_play_cauldron_plop()
+			_present_card_stats_after_play(jackolantern, track_for_exit)
+			if track_for_exit:
+				_try_play_pending_brew_exit_effects_after_plop()
+	)
 
 
 func _play_cauldron_fly(

@@ -9,6 +9,7 @@ const EYEBALL_ID := "eyeball"
 const RED_MUSHROOM_ID := "red_mushroom"
 const PUMPKIN_ID := "pumpkin"
 const JACK_O_LANTERN_ID := "jackolantern"
+const CARVING_KNIFE_ID := "carving_knife"
 const UNICORN_HORN_ID := "unicorn_horn"
 const PARROT_ID := "parrot"
 const FEATHER_ID := "feather"
@@ -44,8 +45,8 @@ const SEVERED_RIGHT_HAND_ID := "severed_right_hand"
 const SEVERED_LEFT_HAND_ID := "severed_left_hand"
 const BOOBERRY_HAND_END_PENALTY := 2
 const GROWTH_POTION_DOUBLE_COUNT := 4
-const COBBLER_ADJACENT_BOOM_BERRY_SCORE := 10
-const COBBLER_ADJACENT_BOOM_BERRY_EXPLOSIVENESS := 2
+const COBBLER_ADJACENT_EXPLOSIVE_SCORE := 10
+const COBBLER_ADJACENT_EXPLOSIVE_EXPLOSIVENESS := 2
 # Countdown ticks once at the start of each new hand draw. 3 means: two free
 # draws after the apple is played, then +3 explosiveness on the 3rd draw.
 const POISON_APPLE_DELAY_HANDS := 3
@@ -139,7 +140,7 @@ static func apply(
 		if (
 			ingredient.id == COBBLER_ID
 			and previous != null
-			and is_boom_berry_id(previous.id)
+			and adds_explosiveness(previous)
 		):
 			_queue_immediate_cobbler_retroactive(result, cobbler_bonus)
 		else:
@@ -237,6 +238,63 @@ static func is_feather_ingredient(ingredient: IngredientData) -> bool:
 	return ingredient != null and is_feather_ingredient_id(ingredient.id)
 
 
+static func is_carving_knife(ingredient: IngredientData) -> bool:
+	return ingredient != null and ingredient.id == CARVING_KNIFE_ID
+
+
+static func is_plain_pumpkin(ingredient: IngredientData) -> bool:
+	return ingredient != null and ingredient.id == PUMPKIN_ID
+
+
+## True when these two hand chips form a Carving Knife + Pumpkin pair (order free).
+static func is_carving_pumpkin_pair(a: IngredientData, b: IngredientData) -> bool:
+	if a == null or b == null:
+		return false
+	return (
+		(is_carving_knife(a) and is_plain_pumpkin(b))
+		or (is_plain_pumpkin(a) and is_carving_knife(b))
+	)
+
+
+## Preview/template Jack-O-Lantern used when simulating a Carving Knife + Pumpkin combine.
+static func make_jackolantern_template() -> IngredientData:
+	return IngredientData.new(
+		JACK_O_LANTERN_ID,
+		"Jack-O-Lantern",
+		"Also a Pumpkin",
+		6,
+		0,
+		22,
+		IngredientData.Rarity.RARE,
+		true,
+		"jackolantern"
+	)
+
+
+## If slot_index is the left card of a carving pair, returns the right partner slot; else -1.
+static func carving_partner_slot_to_right(
+	hand_slots: Array,
+	slot_index: int,
+	locked_slots: Dictionary = {}
+) -> int:
+	if slot_index < 0 or slot_index >= hand_slots.size():
+		return -1
+	if locked_slots.has(slot_index):
+		return -1
+	var left: IngredientData = hand_slots[slot_index]
+	if left == null:
+		return -1
+	var right_slot := slot_index + 1
+	if right_slot >= hand_slots.size():
+		return -1
+	if locked_slots.has(right_slot):
+		return -1
+	var right: IngredientData = hand_slots[right_slot]
+	if not is_carving_pumpkin_pair(left, right):
+		return -1
+	return right_slot
+
+
 static func is_pumpkin_like_id(ingredient_id: String) -> bool:
 	var normalized := str(ingredient_id).to_lower()
 	return normalized == PUMPKIN_ID or normalized == JACK_O_LANTERN_ID
@@ -312,6 +370,55 @@ static func is_boom_berry_id(ingredient_id: String) -> bool:
 	return ingredient_id.begins_with("boom_berry")
 
 
+## Cobbler pairs with any ingredient that contributes explosiveness (base explosive_value > 0).
+static func adds_explosiveness(ingredient: IngredientData) -> bool:
+	return ingredient != null and ingredient.explosive_value > 0
+
+
+## Growth Potion stack helpers: each active layer doubles stats independently (x2 per layer).
+static func growth_stacks_from_state(
+	modifiers: Dictionary = {},
+	legacy_remaining: int = 0
+) -> Array:
+	var stacks: Array = []
+	if modifiers.has("growth_potion_stacks"):
+		for remaining in modifiers.get("growth_potion_stacks", []):
+			var value := int(remaining)
+			if value > 0:
+				stacks.append(value)
+	elif legacy_remaining > 0:
+		stacks.append(legacy_remaining)
+	return stacks
+
+
+## Mutates stacks. Applies one charge from every active layer, multiplying by 2 per layer.
+static func apply_growth_double_stacks(
+	point_value: int,
+	explosive_value: int,
+	stacks: Array
+) -> Dictionary:
+	var layers := 0
+	for i in stacks.size():
+		if int(stacks[i]) > 0:
+			layers += 1
+			stacks[i] = int(stacks[i]) - 1
+	# Drop spent layers so later sim steps stay clean.
+	var kept: Array = []
+	for remaining in stacks:
+		if int(remaining) > 0:
+			kept.append(int(remaining))
+	stacks.clear()
+	for remaining in kept:
+		stacks.append(remaining)
+	for _i in layers:
+		point_value *= 2
+		explosive_value *= 2
+	return {
+		"point_value": point_value,
+		"explosive_value": explosive_value,
+	}
+
+
 ## Gold returned when selling from the shop bag. Boom berries cannot be sold.
 static func sell_value(ingredient: IngredientData) -> int:
 	if ingredient == null or is_boom_berry_id(ingredient.id):
@@ -354,7 +461,7 @@ static func resolve_hand_play_cobbler(
 		)
 		bonus = hand_pair.get("bonus", bonus)
 		if int(bonus.get("score", 0)) > 0 or int(bonus.get("explosiveness", 0)) > 0:
-			if is_boom_berry_id(ingredient.id):
+			if adds_explosiveness(ingredient):
 				return {"bonus": bonus, "retroactive_slot": -1, "apply_to_current": true}
 	if int(bonus.get("score", 0)) == 0 and int(bonus.get("explosiveness", 0)) == 0:
 		var played_pair := _cobbler_adjacency_bonus_from_played_left_neighbor(
@@ -367,14 +474,14 @@ static func resolve_hand_play_cobbler(
 		)
 		bonus = played_pair.get("bonus", bonus)
 		if int(bonus.get("score", 0)) > 0 or int(bonus.get("explosiveness", 0)) > 0:
-			if is_boom_berry_id(ingredient.id):
+			if adds_explosiveness(ingredient):
 				return {"bonus": bonus, "retroactive_slot": -1, "apply_to_current": true}
 	if int(bonus.get("score", 0)) == 0 and int(bonus.get("explosiveness", 0)) == 0:
 		return {"bonus": bonus, "retroactive_slot": -1}
 	if (
 		ingredient.id == COBBLER_ID
 		and previous != null
-		and is_boom_berry_id(previous.id)
+		and adds_explosiveness(previous)
 		and last_hand_slot >= 0
 		and abs(play_slot - last_hand_slot) == 1
 	):
@@ -392,7 +499,7 @@ static func resolve_hand_play_cobbler(
 	)
 	if target_slot < 0:
 		if not locked_slots.is_empty():
-			var blocked_slot := _hand_boom_berry_slot_immediately_left(
+			var blocked_slot := _hand_explosive_slot_immediately_left(
 				hand_slots,
 				play_slot,
 				{}
@@ -405,7 +512,7 @@ static func resolve_hand_play_cobbler(
 				last_hand_slot >= 0
 				and not locked_slots.has(last_hand_slot)
 				and last_ingredient != null
-				and is_boom_berry_id(last_ingredient.id)
+				and adds_explosiveness(last_ingredient)
 			):
 				return {"bonus": bonus, "retroactive_slot": last_hand_slot}
 			return {"bonus": {"score": 0, "explosiveness": 0}, "retroactive_slot": -1}
@@ -415,7 +522,7 @@ static func resolve_hand_play_cobbler(
 			"apply_retroactive_immediately": true,
 		}
 	if target_slot == play_slot:
-		if is_boom_berry_id(ingredient.id):
+		if adds_explosiveness(ingredient):
 			return {"bonus": bonus, "retroactive_slot": -1, "apply_to_current": true}
 		return {"bonus": {"score": 0, "explosiveness": 0}, "retroactive_slot": -1}
 	return {"bonus": bonus, "retroactive_slot": target_slot}
@@ -457,15 +564,15 @@ static func _cobbler_adjacency_bonus_between(
 ) -> Dictionary:
 	if previous == null or ingredient == null:
 		return {"score": 0, "explosiveness": 0}
-	if is_boom_berry_id(ingredient.id) and previous.id == COBBLER_ID:
+	if adds_explosiveness(ingredient) and previous.id == COBBLER_ID:
 		return {
-			"score": COBBLER_ADJACENT_BOOM_BERRY_SCORE,
-			"explosiveness": COBBLER_ADJACENT_BOOM_BERRY_EXPLOSIVENESS,
+			"score": COBBLER_ADJACENT_EXPLOSIVE_SCORE,
+			"explosiveness": COBBLER_ADJACENT_EXPLOSIVE_EXPLOSIVENESS,
 		}
-	if ingredient.id == COBBLER_ID and is_boom_berry_id(previous.id):
+	if ingredient.id == COBBLER_ID and adds_explosiveness(previous):
 		return {
-			"score": COBBLER_ADJACENT_BOOM_BERRY_SCORE,
-			"explosiveness": COBBLER_ADJACENT_BOOM_BERRY_EXPLOSIVENESS,
+			"score": COBBLER_ADJACENT_EXPLOSIVE_SCORE,
+			"explosiveness": COBBLER_ADJACENT_EXPLOSIVE_EXPLOSIVENESS,
 		}
 	return {"score": 0, "explosiveness": 0}
 
@@ -506,7 +613,7 @@ static func _cobbler_adjacency_bonus_from_hand_neighbors(
 	if ingredient == null or play_slot < 0:
 		return empty
 
-	if is_boom_berry_id(ingredient.id):
+	if adds_explosiveness(ingredient):
 		for direction in [-1, 1]:
 			var neighbor_slot: int = play_slot + int(direction)
 			if neighbor_slot < 0 or neighbor_slot >= hand_slots.size():
@@ -519,8 +626,8 @@ static func _cobbler_adjacency_bonus_from_hand_neighbors(
 			if neighbor != null and neighbor.id == COBBLER_ID:
 				return {
 					"bonus": {
-						"score": COBBLER_ADJACENT_BOOM_BERRY_SCORE,
-						"explosiveness": COBBLER_ADJACENT_BOOM_BERRY_EXPLOSIVENESS,
+						"score": COBBLER_ADJACENT_EXPLOSIVE_SCORE,
+						"explosiveness": COBBLER_ADJACENT_EXPLOSIVE_EXPLOSIVENESS,
 					},
 					"neighbor_slot": neighbor_slot,
 				}
@@ -538,7 +645,7 @@ static func _cobbler_adjacency_bonus_from_played_left_neighbor(
 	var empty := {"bonus": {"score": 0, "explosiveness": 0}}
 	if ingredient == null or play_slot < 0:
 		return empty
-	if not is_boom_berry_id(ingredient.id):
+	if not adds_explosiveness(ingredient):
 		return empty
 	var left_slot := _hand_neighbor_slot(hand_slots, play_slot, -1, locked_slots)
 	if left_slot < 0 or left_slot >= hand_slots.size():
@@ -555,8 +662,8 @@ static func _cobbler_adjacency_bonus_from_played_left_neighbor(
 		return empty
 	return {
 		"bonus": {
-			"score": COBBLER_ADJACENT_BOOM_BERRY_SCORE,
-			"explosiveness": COBBLER_ADJACENT_BOOM_BERRY_EXPLOSIVENESS,
+			"score": COBBLER_ADJACENT_EXPLOSIVE_SCORE,
+			"explosiveness": COBBLER_ADJACENT_EXPLOSIVE_EXPLOSIVENESS,
 		},
 	}
 
@@ -571,7 +678,7 @@ static func _cauldron_contains_ingredient_id(
 	return false
 
 
-static func _hand_boom_berry_slot_immediately_left(
+static func _hand_explosive_slot_immediately_left(
 	hand_slots: Array,
 	slot_index: int,
 	locked_slots: Dictionary = {}
@@ -582,7 +689,7 @@ static func _hand_boom_berry_slot_immediately_left(
 			left_slot -= 1
 			continue
 		if hand_slots[left_slot] != null:
-			if is_boom_berry_id(hand_slots[left_slot].id):
+			if adds_explosiveness(hand_slots[left_slot]):
 				return left_slot
 			return -1
 		left_slot -= 1
@@ -600,8 +707,8 @@ static func _cobbler_bonus_target_slot(
 ) -> int:
 	if ingredient == null or previous == null:
 		return -1 if ingredient != null and ingredient.id == COBBLER_ID else play_slot
-	if ingredient.id == COBBLER_ID and is_boom_berry_id(previous.id):
-		var left_slot := _hand_boom_berry_slot_immediately_left(
+	if ingredient.id == COBBLER_ID and adds_explosiveness(previous):
+		var left_slot := _hand_explosive_slot_immediately_left(
 			hand_slots,
 			play_slot,
 			locked_slots
@@ -613,7 +720,7 @@ static func _cobbler_bonus_target_slot(
 			last_hand_slot >= 0
 			and not locked_slots.has(last_hand_slot)
 			and last_ingredient != null
-			and is_boom_berry_id(last_ingredient.id)
+			and adds_explosiveness(last_ingredient)
 		):
 			return last_hand_slot
 		return -1
@@ -763,7 +870,10 @@ static func compute_hand_display_stats(
 	)
 
 	var sim_cauldron: Array = cauldron_contents.duplicate()
-	var doubles_remaining := growth_potion_doubles_remaining
+	var growth_stacks: Array = growth_stacks_from_state(
+		modifiers,
+		growth_potion_doubles_remaining
+	)
 	var parrot_doubles_next := bool(modifiers.get("parrot_doubles_next", false))
 	var unicorn_cures_next := bool(modifiers.get("unicorn_cures_next", false))
 	var ice_cube_shields := int(modifiers.get("ice_cube_shields", 0))
@@ -808,10 +918,9 @@ static func compute_hand_display_stats(
 				"point_value": bw_point,
 				"explosive_value": bw_explosive,
 			}
-			if doubles_remaining > 0:
-				bw_point *= 2
-				bw_explosive *= 2
-				doubles_remaining -= 1
+			var bw_growth := apply_growth_double_stacks(bw_point, bw_explosive, growth_stacks)
+			bw_point = int(bw_growth.get("point_value", bw_point))
+			bw_explosive = int(bw_growth.get("explosive_value", bw_explosive))
 			if parrot_doubles_next:
 				parrot_doubles_next = false
 			if bool(step.get("in_rhythm_doubles", false)):
@@ -834,6 +943,8 @@ static func compute_hand_display_stats(
 			}
 			sim_explosiveness += bw_explosive_add
 			sim_cauldron.append(ingredient)
+			if ingredient.id == GROWTH_POTION_ID:
+				growth_stacks.append(GROWTH_POTION_DOUBLE_COUNT)
 			last_hand_slot = play_slot
 			last_hand_ingredient = ingredient
 			continue
@@ -890,10 +1001,13 @@ static func compute_hand_display_stats(
 			"explosive_value": explosive_value,
 		}
 
-		if doubles_remaining > 0:
-			point_value *= 2
-			explosive_value *= 2
-			doubles_remaining -= 1
+		var growth_scaled := apply_growth_double_stacks(
+			point_value,
+			explosive_value,
+			growth_stacks
+		)
+		point_value = int(growth_scaled.get("point_value", point_value))
+		explosive_value = int(growth_scaled.get("explosive_value", explosive_value))
 		if bool(step.get("in_rhythm_doubles", false)):
 			point_value *= 2
 			explosive_value *= 2
@@ -948,6 +1062,8 @@ static func compute_hand_display_stats(
 			unicorn_cures_next = true
 		if ingredient.id == ICE_CUBE_ID:
 			ice_cube_shields = ICE_CUBE_SHIELD_COUNT
+		if ingredient.id == GROWTH_POTION_ID:
+			growth_stacks.append(GROWTH_POTION_DOUBLE_COUNT)
 
 	return display_stats
 
@@ -972,7 +1088,10 @@ static func compute_immediate_cauldron_play_preview(
 		}
 
 	var owned_trinket_ids: Array = modifiers.get("owned_trinket_ids", [])
-	var doubles_remaining := int(modifiers.get("growth_potion_doubles_remaining", 0))
+	var growth_stacks: Array = growth_stacks_from_state(
+		modifiers,
+		int(modifiers.get("growth_potion_doubles_remaining", 0))
+	)
 	var unicorn_cures_next := bool(modifiers.get("unicorn_cures_next", false))
 	var ice_cube_shields := int(modifiers.get("ice_cube_shields", 0))
 	var sim_explosiveness := int(modifiers.get("explosiveness", 0))
@@ -1020,9 +1139,13 @@ static func compute_immediate_cauldron_play_preview(
 	explosive_value += int(effect_bonuses.get("bonus_explosiveness", 0))
 	point_value -= int(effect_bonuses.get("score_penalty", 0))
 
-	if doubles_remaining > 0:
-		point_value *= 2
-		explosive_value *= 2
+	var growth_scaled := apply_growth_double_stacks(
+		point_value,
+		explosive_value,
+		growth_stacks
+	)
+	point_value = int(growth_scaled.get("point_value", point_value))
+	explosive_value = int(growth_scaled.get("explosive_value", explosive_value))
 	if bool(step_flags.get("in_rhythm_doubles", false)):
 		point_value *= 2
 		explosive_value *= 2

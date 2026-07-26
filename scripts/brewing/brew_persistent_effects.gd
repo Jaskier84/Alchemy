@@ -25,12 +25,16 @@ static func collect(session: BrewSession) -> Array[EffectEntry]:
 		session.get_ice_cube_shields_remaining(),
 		10
 	)
-	_add_counter_entry(
-		entries,
-		IngredientEffects.GROWTH_POTION_ID,
-		session.get_growth_potion_doubles_remaining(),
-		11
-	)
+	# One icon per active Growth Potion layer (overlapping stacks multiply stats).
+	var growth_sort := 11
+	for remaining in session.get_growth_potion_stack_remainings():
+		_add_entry(
+			entries,
+			IngredientEffects.GROWTH_POTION_ID,
+			str(remaining),
+			growth_sort
+		)
+		growth_sort += 1
 	_add_counter_entry(
 		entries,
 		IngredientEffects.LIGHTNING_ID,

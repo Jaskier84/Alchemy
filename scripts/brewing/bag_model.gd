@@ -334,11 +334,32 @@ func remove_one_chip_from_master(chip: IngredientData) -> void:
 	for i in _master_chips.size():
 		if _master_chips[i] == chip:
 			_master_chips.remove_at(i)
+			_remove_working_chip(chip)
 			return
 	for i in _master_chips.size():
 		if _master_chips[i] != null and _master_chips[i].id == chip.id:
+			var removed: IngredientData = _master_chips[i]
 			_master_chips.remove_at(i)
+			_remove_working_chip(removed)
 			return
+
+
+## Remove two chips from the master bag and insert a replacement chip instance.
+func convert_two_chips_to(
+	chip_a: IngredientData,
+	chip_b: IngredientData,
+	replacement_template: IngredientData
+) -> IngredientData:
+	remove_one_chip_from_master(chip_a)
+	remove_one_chip_from_master(chip_b)
+	if replacement_template == null:
+		return null
+	var before := _master_chips.size()
+	if not add_to_master_bag(replacement_template):
+		force_add_to_master_bag(replacement_template)
+	if _master_chips.size() <= before:
+		return null
+	return _master_chips[_master_chips.size() - 1]
 
 
 func reshuffle_after_phoenix(cauldron_contents: Array) -> void:

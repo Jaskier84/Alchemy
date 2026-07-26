@@ -105,7 +105,9 @@ var _frog_leg_save_pending: bool = false
 
 var _booberry_count_this_hand: int = 0
 var _poison_apple_pending: Array = []
-var _growth_potion_doubles_remaining: int = 0
+## Each entry is remaining doubled plays for one Growth Potion layer.
+## Overlapping layers multiply (two layers = x4 stats) instead of merging into one timer.
+var _growth_potion_stacks: Array[int] = []
 var _hand_end_effects_pending: bool = false
 var _brew_finalized: bool = false
 
@@ -120,6 +122,8 @@ var last_presented_stat_deltas: Dictionary = {
 	"gold_reward": 0,
 }
 var last_play_fly_count: int = 1
+## Set when a Carving Knife + Pumpkin pair combines; consumed by brew UI presentation.
+var last_carving_combine: Dictionary = {}
 
 var _pending_bubbling_brew_return: IngredientData = null
 var _pending_phoenix_save_presentation: bool = false
@@ -453,7 +457,7 @@ func _compute_unicorn_cured_slots_for_hand(slots: Array, severed_layout_slots: A
 		context.cauldron_contents,
 		context.current_aura,
 		HAND_SLOT_COUNT,
-		_growth_potion_doubles_remaining,
+		get_growth_potion_doubles_remaining(),
 		_build_hand_display_modifiers(),
 		severed_layout_slots
 	)
@@ -523,7 +527,7 @@ func _compute_hand_display_stats(slots_override: Array = []) -> Array:
 		context.cauldron_contents,
 		context.current_aura,
 		HAND_SLOT_COUNT,
-		_growth_potion_doubles_remaining,
+		get_growth_potion_doubles_remaining(),
 		_build_hand_display_modifiers(),
 		severed_layout_slots
 	)
@@ -547,6 +551,8 @@ func _build_hand_display_modifiers() -> Dictionary:
 		"locked_slots": _hand_locked_slots,
 		"play_cursor": _play_slot_cursor if _hand_phase == HandPhase.PLAYING else -1,
 		"layout_hand_slots": layout_hand_slots,
+		"growth_potion_stacks": _growth_potion_stacks.duplicate(),
+		"growth_potion_doubles_remaining": get_growth_potion_doubles_remaining(),
 	}
 
 
@@ -616,7 +622,6 @@ func get_bat_wing_choice_preview(ingredient: IngredientData) -> Dictionary:
 		layout_slots = _resolve_display_hand_slots()
 
 	var modifiers := _build_hand_display_modifiers()
-	modifiers["growth_potion_doubles_remaining"] = _growth_potion_doubles_remaining
 	modifiers["layout_hand_slots"] = layout_slots
 	modifiers["severed_layout_slots"] = layout_slots
 	modifiers["locked_slots"] = _hand_locked_slots
@@ -786,7 +791,41 @@ func get_ice_cube_shields_remaining() -> int:
 
 
 func get_growth_potion_doubles_remaining() -> int:
-	return _growth_potion_doubles_remaining
+	var total := 0
+	for remaining in _growth_potion_stacks:
+		total += maxi(0, int(remaining))
+	return total
+
+
+## Active Growth Potion layers with remaining counts (one buff-bar icon each).
+func get_growth_potion_stack_remainings() -> Array[int]:
+	var stacks: Array[int] = []
+	for remaining in _growth_potion_stacks:
+		var value := int(remaining)
+		if value > 0:
+			stacks.append(value)
+	return stacks
+
+
+func _apply_growth_potion_double_layers(point_value: int, explosive_add: int) -> Dictionary:
+	var layers := 0
+	for stack_index in _growth_potion_stacks.size():
+		if _growth_potion_stacks[stack_index] > 0:
+			layers += 1
+			_growth_potion_stacks[stack_index] -= 1
+	_prune_growth_potion_stacks()
+	for _layer in layers:
+		point_value *= 2
+		explosive_add *= 2
+	return {"point_value": point_value, "explosive_add": explosive_add}
+
+
+func _prune_growth_potion_stacks() -> void:
+	var kept: Array[int] = []
+	for remaining in _growth_potion_stacks:
+		if int(remaining) > 0:
+			kept.append(int(remaining))
+	_growth_potion_stacks = kept
 
 
 func get_pocket_watch_countdown() -> int:
@@ -1499,8 +1538,17 @@ func _play_next_hand_card() -> void:
 		_request_finish_hand_play()
 		return
 
-	var ingredient: IngredientData = _hand_slots[_play_slot_cursor]
 	var slot_index := _play_slot_cursor
+	var partner_slot := IngredientEffects.carving_partner_slot_to_right(
+		_hand_slots,
+		slot_index,
+		_hand_locked_slots
+	)
+	if partner_slot >= 0:
+		_play_carving_combine(slot_index, partner_slot)
+		return
+
+	var ingredient: IngredientData = _hand_slots[_play_slot_cursor]
 	_hand_slots[_play_slot_cursor] = null
 	_play_slot_cursor += 1
 
@@ -1512,6 +1560,49 @@ func _play_next_hand_card() -> void:
 
 	hand_card_played.emit(context, ingredient, slot_index, parrot_doubled)
 	brew_updated.emit(context)
+
+
+func _play_carving_combine(left_slot: int, right_slot: int) -> void:
+	var left_ingredient: IngredientData = _hand_slots[left_slot]
+	var right_ingredient: IngredientData = _hand_slots[right_slot]
+	_hand_slots[left_slot] = null
+	_hand_slots[right_slot] = null
+	_play_slot_cursor = left_slot + 1
+
+	var jack_template := _find_ingredient_template(IngredientEffects.JACK_O_LANTERN_ID)
+	if jack_template == null:
+		jack_template = IngredientEffects.make_jackolantern_template()
+	var jackolantern := context.bag.convert_two_chips_to(
+		left_ingredient,
+		right_ingredient,
+		jack_template
+	)
+	if jackolantern == null:
+		# Fallback: still play a template jack so the hand doesn't soft-lock.
+		jackolantern = jack_template.duplicate_for_bag()
+
+	last_carving_combine = {
+		"left_slot": left_slot,
+		"right_slot": right_slot,
+		"left_ingredient": left_ingredient,
+		"right_ingredient": right_ingredient,
+		"jackolantern": jackolantern,
+	}
+	last_play_fly_count = 1
+	var parrot_doubled := _apply_ingredient(jackolantern, true, true, left_slot)
+	if context.is_exploded():
+		_chain_draws_remaining = 0
+		if not _try_frog_leg_save():
+			_resolve_explosion()
+
+	hand_card_played.emit(context, jackolantern, left_slot, parrot_doubled)
+	brew_updated.emit(context)
+
+
+func consume_carving_combine_presentation() -> Dictionary:
+	var data := last_carving_combine.duplicate(true)
+	last_carving_combine.clear()
+	return data
 
 
 func has_pending_hand_end_effects() -> bool:
@@ -1801,10 +1892,9 @@ func _apply_ingredient_play(
 		elif ingredient.id == IngredientEffects.SEVERED_LEFT_HAND_ID:
 			point_value += _count_hand_ingredients_to_right(hand_slot_index)
 
-	if _growth_potion_doubles_remaining > 0:
-		point_value *= 2
-		explosive_add *= 2
-		_growth_potion_doubles_remaining -= 1
+	var growth_scaled := _apply_growth_potion_double_layers(point_value, explosive_add)
+	point_value = int(growth_scaled.get("point_value", point_value))
+	explosive_add = int(growth_scaled.get("explosive_add", explosive_add))
 	if _AuraEffects.in_rhythm_doubles_ingredient(
 		cauldron_count_before,
 		context.current_aura
@@ -1904,7 +1994,8 @@ func _apply_ingredient_play(
 			}
 		)
 	if effect.growth_potion_doubles > 0:
-		_growth_potion_doubles_remaining += effect.growth_potion_doubles
+		# New potion is its own layer so it multiplies with existing stacks.
+		_growth_potion_stacks.append(effect.growth_potion_doubles)
 	if effect.bat_wing_pick_count > 0:
 		_bat_wing_choices = context.bag.take_random_excluding_ids(
 			_blocked_bag_draw_ingredient_ids(),
@@ -2810,7 +2901,8 @@ func _reset_draw_flow_state() -> void:
 	_jar_of_froglegs_returns_consumed = false
 	_booberry_count_this_hand = 0
 	_poison_apple_pending.clear()
-	_growth_potion_doubles_remaining = 0
+	_growth_potion_stacks.clear()
+	last_carving_combine.clear()
 
 
 func calculate_gold_reward() -> int:
