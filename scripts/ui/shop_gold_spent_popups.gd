@@ -19,7 +19,14 @@ func show_spent(amount: int, gold_display: Control) -> void:
 	if amount <= 0 or gold_display == null:
 		return
 	_clear_active_popups()
-	_show_popup(amount, gold_display)
+	_show_popup("-%d" % amount, gold_display)
+
+
+func show_gained(amount: int, gold_display: Control) -> void:
+	if amount <= 0 or gold_display == null:
+		return
+	_clear_active_popups()
+	_show_popup("+%d" % amount, gold_display)
 
 
 func _popup_center(gold_display: Control, label_size: Vector2) -> Vector2:
@@ -30,8 +37,8 @@ func _popup_center(gold_display: Control, label_size: Vector2) -> Vector2:
 	)
 
 
-func _show_popup(amount: int, gold_display: Control) -> void:
-	var label := _make_label("-%d" % amount)
+func _show_popup(text: String, gold_display: Control) -> void:
+	var label := _make_label(text)
 	add_child(label)
 	_active_labels.append(label)
 

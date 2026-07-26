@@ -2,9 +2,14 @@ class_name BagInventorySlot
 extends Control
 
 const ART_SIZE := Vector2(72.0, 72.0)
+const DEFAULT_SLOT_SIZE := Vector2(88.0, 88.0)
+const SELL_SLOT_SIZE := Vector2(88.0, 108.0)
+const SELECTED_MODULATE := Color(1.15, 1.08, 0.75, 1.0)
 
 @onready var _art: TextureRect = $Art
 @onready var _count_label: Label = $CountLabel
+@onready var _value_label: Label = get_node_or_null("ValueLabel") as Label
+@onready var _selection_frame: ColorRect = get_node_or_null("SelectionFrame") as ColorRect
 
 signal slot_gui_input(event: InputEvent)
 
@@ -15,6 +20,9 @@ var _pending_trinket: TrinketData
 var _pending_count: int = 0
 var _show_count: bool = true
 var _interactive: bool = false
+var _show_sell_value: bool = false
+var _sell_value: int = 0
+var _selected: bool = false
 
 
 func _ready() -> void:
@@ -22,6 +30,8 @@ func _ready() -> void:
 	resized.connect(_sync_art_layout)
 	if not gui_input.is_connected(_on_gui_input):
 		gui_input.connect(_on_gui_input)
+	_ensure_value_label()
+	_ensure_selection_frame()
 	_refresh_display()
 
 
@@ -53,17 +63,39 @@ func bind_trinket(trinket: TrinketData, selected: bool, show_selection: bool = t
 	_pending_trinket = trinket
 	_pending_count = 1 if selected else 0
 	_show_count = show_selection
+	_show_sell_value = false
+	_selected = false
 	_store_trinket(trinket)
 	_refresh_display()
 
 
+func set_sell_value_display(value: int, enabled: bool) -> void:
+	_show_sell_value = enabled
+	_sell_value = maxi(0, value)
+	_apply_slot_size()
+	_refresh_value_label()
+	call_deferred("_sync_art_layout")
+
+
+func set_selected(selected: bool) -> void:
+	_selected = selected
+	_apply_selection_visual()
+
+
+func is_selected() -> bool:
+	return _selected
+
+
 func _refresh_display() -> void:
 	_resolve_nodes()
+	_apply_slot_size()
 	if _pending_trinket != null:
 		if _count_label != null:
 			_count_label.visible = _show_count and _pending_count > 0
 			_count_label.text = str(_pending_count)
 		_apply_trinket_art(_pending_trinket)
+		_refresh_value_label()
+		_apply_selection_visual()
 		call_deferred("_sync_art_layout")
 		return
 	if _pending_ingredient == null:
@@ -72,7 +104,33 @@ func _refresh_display() -> void:
 		_count_label.visible = _show_count
 		_count_label.text = str(maxi(1, _pending_count))
 	_apply_art(_pending_ingredient)
+	_refresh_value_label()
+	_apply_selection_visual()
 	call_deferred("_sync_art_layout")
+
+
+func _apply_slot_size() -> void:
+	var target := SELL_SLOT_SIZE if _show_sell_value else DEFAULT_SLOT_SIZE
+	custom_minimum_size = target
+	size = target
+
+
+func _refresh_value_label() -> void:
+	_ensure_value_label()
+	if _value_label == null:
+		return
+	if not _show_sell_value:
+		_value_label.visible = false
+		return
+	_value_label.visible = true
+	_value_label.text = str(_sell_value)
+
+
+func _apply_selection_visual() -> void:
+	_ensure_selection_frame()
+	if _selection_frame != null:
+		_selection_frame.visible = _selected
+	modulate = SELECTED_MODULATE if _selected else Color.WHITE
 
 
 func _resolve_nodes() -> void:
@@ -80,6 +138,44 @@ func _resolve_nodes() -> void:
 		_art = get_node_or_null("Art") as TextureRect
 	if _count_label == null:
 		_count_label = get_node_or_null("CountLabel") as Label
+	if _value_label == null:
+		_value_label = get_node_or_null("ValueLabel") as Label
+	if _selection_frame == null:
+		_selection_frame = get_node_or_null("SelectionFrame") as ColorRect
+
+
+func _ensure_value_label() -> void:
+	if _value_label != null and is_instance_valid(_value_label):
+		return
+	_value_label = get_node_or_null("ValueLabel") as Label
+	if _value_label != null:
+		return
+	_value_label = Label.new()
+	_value_label.name = "ValueLabel"
+	_value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_value_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.3, 1.0))
+	_value_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08, 1.0))
+	_value_label.add_theme_constant_override("outline_size", 3)
+	_value_label.add_theme_font_size_override("font_size", 16)
+	add_child(_value_label)
+
+
+func _ensure_selection_frame() -> void:
+	if _selection_frame != null and is_instance_valid(_selection_frame):
+		return
+	_selection_frame = get_node_or_null("SelectionFrame") as ColorRect
+	if _selection_frame != null:
+		return
+	_selection_frame = ColorRect.new()
+	_selection_frame.name = "SelectionFrame"
+	_selection_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_selection_frame.color = Color(0.95, 0.78, 0.25, 0.28)
+	_selection_frame.visible = false
+	_selection_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_selection_frame)
+	move_child(_selection_frame, 0)
 
 
 func get_art_center_global() -> Vector2:
@@ -122,9 +218,13 @@ func _sync_art_layout() -> void:
 	if _art == null:
 		return
 	var host_size := size
-	var art_pos := (host_size - ART_SIZE) * 0.5
+	var art_top := 4.0 if _show_sell_value else (host_size.y - ART_SIZE.y) * 0.5
+	var art_pos := Vector2((host_size.x - ART_SIZE.x) * 0.5, art_top)
 	_art.position = art_pos
 	_art.size = ART_SIZE
+	if _value_label != null and _show_sell_value:
+		_value_label.position = Vector2(0.0, art_pos.y + ART_SIZE.y + 1.0)
+		_value_label.size = Vector2(host_size.x, 22.0)
 
 
 func get_ingredient() -> IngredientData:

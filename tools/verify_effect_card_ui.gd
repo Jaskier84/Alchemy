@@ -59,7 +59,7 @@ func _test_hand_card_effect_visibility() -> void:
 
 	var ingredient := IngredientData.new(
 		"boom_berry_2",
-		"Boom Berry",
+		"Hot Potato",
 		"",
 		2,
 		2,
@@ -105,7 +105,7 @@ func _test_picker_card_effect_visibility() -> void:
 
 	var ingredient := IngredientData.new(
 		"boom_berry_2",
-		"Boom Berry",
+		"Hot Potato",
 		"",
 		2,
 		2,

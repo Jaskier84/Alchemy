@@ -9,12 +9,15 @@ const BOOM_BERRY_REWARD_NOTE_FADE_DURATION := 0.55
 const BAG_COUNT_LABEL_INSET := Vector2(0.0, 6.0)
 const BAG_HOVER_SCALE := 1.08
 const BAG_HOVER_SCALE_SPEED := 12.0
+## LevelAuraBanner sits at z_index 8; raise the whole offer row above it on hover.
+const OFFER_CARDS_Z_REST := 0
+const OFFER_CARDS_Z_HOVER := 12
 
 @export var bag_fly_target_path: NodePath = NodePath("BagTarget/BagIcon")
 
 @onready var _gold_counter: GoldDisplay = $GoldCounter
-@onready var _reroll_button: ShopRerollButton = $RerollButton
-@onready var _reroll_cost: GoldCostBadge = $RerollCost
+@onready var _reroll_button: ShopRerollButton = get_node_or_null("RerollButton") as ShopRerollButton
+@onready var _reroll_cost: GoldCostBadge = get_node_or_null("RerollCost") as GoldCostBadge
 @onready var _buy_mulligan_button: ShopRerollButton = $BuyMulliganButton
 @onready var _buy_mulligan_cost: ShopButtonCostOverlay = $BuyMulliganCost
 @onready var _shop_gold_popups: ShopGoldSpentPopups = $ShopGoldPopups
@@ -27,6 +30,7 @@ const BAG_HOVER_SCALE_SPEED := 12.0
 @onready var _bag_count_label: Label = $BagCountLabel
 @onready var _bag_contents: BagContentsOverlay = $BagContentsOverlay
 @onready var _level_aura_banner: LevelAuraBanner = $LevelAuraBanner
+@onready var _offer_cards_root: Control = $OfferCards
 
 var offer_cards: Array[IngredientCard] = []
 var _purchase_animations_pending: int = 0
@@ -35,16 +39,16 @@ var _boom_berry_reward_note_tween: Tween
 var _bag_base_scale := Vector2.ONE
 var _bag_hover_tween: Tween
 var _bag_hovered: bool = false
+var _rightmost_offer_hovered: bool = false
 
 
 func _ready() -> void:
 	_gather_offer_cards()
+	_hide_removed_reroll_controls()
 	if leave_shop_button != null and not leave_shop_button.pressed.is_connected(GameManager.leave_shop):
 		leave_shop_button.pressed.connect(GameManager.leave_shop)
 	else:
 		push_error("ShopPanel: LeaveShopButton not found")
-	if _reroll_button != null and not _reroll_button.pressed.is_connected(_on_reroll_pressed):
-		_reroll_button.pressed.connect(_on_reroll_pressed)
 	if _buy_mulligan_button != null and not _buy_mulligan_button.pressed.is_connected(
 		_on_buy_mulligan_pressed
 	):
@@ -52,16 +56,30 @@ func _ready() -> void:
 	if _bag_button != null and not _bag_button.pressed.is_connected(_on_bag_button_pressed):
 		_bag_button.pressed.connect(_on_bag_button_pressed)
 	_configure_bag_hover()
-	if _bag_contents != null and not _bag_contents.overlay_closed.is_connected(_on_bag_contents_closed):
-		_bag_contents.overlay_closed.connect(_on_bag_contents_closed)
+	if _bag_contents != null:
+		if not _bag_contents.overlay_closed.is_connected(_on_bag_contents_closed):
+			_bag_contents.overlay_closed.connect(_on_bag_contents_closed)
+		if not _bag_contents.ingredient_sold.is_connected(_on_bag_ingredient_sold):
+			_bag_contents.ingredient_sold.connect(_on_bag_ingredient_sold)
 
 	for card in offer_cards:
 		card.offer_pressed.connect(_on_offer_pressed)
+	_wire_rightmost_offer_z_hover()
+	_sync_offer_cards_z()
 	GameManager.run_changed.connect(refresh)
 	visibility_changed.connect(_on_visibility_changed)
 	if not GameManager.primary_keyboard_feedback.is_connected(_on_primary_keyboard_feedback):
 		GameManager.primary_keyboard_feedback.connect(_on_primary_keyboard_feedback)
 	call_deferred("refresh")
+
+
+func _hide_removed_reroll_controls() -> void:
+	# Shop no longer has a manual reroll — buying refreshes the offer row.
+	if _reroll_button != null:
+		_reroll_button.visible = false
+		_reroll_button.disabled = true
+	if _reroll_cost != null:
+		_reroll_cost.visible = false
 
 
 func _on_primary_keyboard_feedback(action: StringName, phase: StringName) -> void:
@@ -131,12 +149,14 @@ func _on_visibility_changed() -> void:
 	else:
 		_hide_bag_contents()
 		_reset_shop_interaction_locks()
+		_rightmost_offer_hovered = false
+		_sync_offer_cards_z()
 
 
 func _on_bag_button_pressed() -> void:
 	if GameManager.run == null or _bag_contents == null:
 		return
-	_bag_contents.toggle(GameManager.run.bag)
+	_bag_contents.toggle(GameManager.run.bag, true)
 	_set_offer_hover_enabled(not _bag_contents.is_open())
 	_play_shop_select_pop()
 
@@ -144,6 +164,14 @@ func _on_bag_button_pressed() -> void:
 func _on_bag_contents_closed() -> void:
 	_set_offer_hover_enabled(true)
 	call_deferred("_align_bag_count_label")
+
+
+func _on_bag_ingredient_sold(gold_gained: int) -> void:
+	if gold_gained > 0:
+		_play_shop_select_pop()
+		if _shop_gold_popups != null and _gold_counter != null:
+			_shop_gold_popups.show_gained(gold_gained, _gold_counter)
+	refresh_stats_only()
 
 
 func _hide_bag_contents() -> void:
@@ -163,6 +191,42 @@ func _set_offer_hover_enabled(enabled: bool) -> void:
 		else:
 			card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			card.disabled = true
+	if not enabled:
+		_rightmost_offer_hovered = false
+		_sync_offer_cards_z()
+
+
+func _wire_rightmost_offer_z_hover() -> void:
+	## Only the rightmost offer overlaps the next-encounter banner.
+	if offer_cards.is_empty():
+		return
+	var rightmost := offer_cards[offer_cards.size() - 1]
+	if rightmost == null:
+		return
+	if not rightmost.mouse_entered.is_connected(_on_rightmost_offer_mouse_entered):
+		rightmost.mouse_entered.connect(_on_rightmost_offer_mouse_entered)
+	if not rightmost.mouse_exited.is_connected(_on_rightmost_offer_mouse_exited):
+		rightmost.mouse_exited.connect(_on_rightmost_offer_mouse_exited)
+
+
+func _on_rightmost_offer_mouse_entered() -> void:
+	_rightmost_offer_hovered = true
+	_sync_offer_cards_z()
+
+
+func _on_rightmost_offer_mouse_exited() -> void:
+	_rightmost_offer_hovered = false
+	_sync_offer_cards_z()
+
+
+func _sync_offer_cards_z() -> void:
+	## Offer row rests under the next-encounter banner. Raise only while the
+	## rightmost offer (the one that overlaps the description) is hovered.
+	if _offer_cards_root == null:
+		return
+	_offer_cards_root.z_index = (
+		OFFER_CARDS_Z_HOVER if _rightmost_offer_hovered else OFFER_CARDS_Z_REST
+	)
 
 
 func _play_shop_select_pop() -> void:
@@ -170,21 +234,6 @@ func _play_shop_select_pop() -> void:
 		return
 	_shop_select_pop_player.stop()
 	_shop_select_pop_player.play()
-
-
-func _on_reroll_pressed() -> void:
-	if _purchase_animations_pending > 0:
-		return
-	var run := GameManager.run
-	if run == null:
-		return
-	var spent: int = run.get_shop_reroll_cost()
-	if GameManager.try_reroll_shop():
-		_play_shop_select_pop()
-		_show_gold_spent(spent)
-		refresh()
-	elif _gold_counter != null:
-		_gold_counter.shake()
 
 
 func _on_buy_mulligan_pressed() -> void:
@@ -472,6 +521,12 @@ func _format_boom_berry_reward_note(rewards: Array[IngredientData]) -> String:
 			var plural_label: String = label
 			if plural_label.ends_with("Berry"):
 				plural_label = plural_label.substr(0, plural_label.length() - 5) + "Berries"
+			elif plural_label.ends_with("Bomb"):
+				plural_label = plural_label + "s"
+			elif plural_label.ends_with("Potato"):
+				plural_label = plural_label.substr(0, plural_label.length() - 6) + "Potatoes"
+			elif plural_label == "Heartburn":
+				plural_label = "Heartburns"
 			parts.append("%d %s" % [count, plural_label])
 
 	if parts.size() == 1:
@@ -608,12 +663,6 @@ func refresh_stats_only() -> void:
 		call_deferred("_align_bag_count_label")
 	if _gold_counter != null:
 		_gold_counter.set_amount(run.gold)
-	if _reroll_button != null:
-		var reroll_cost := run.get_shop_reroll_cost()
-		if _reroll_cost != null:
-			_reroll_cost.set_cost(reroll_cost)
-		_reroll_button.disabled = reroll_cost > 0 and run.gold < reroll_cost
-		_reroll_button.modulate = Color(0.55, 0.55, 0.55, 1.0) if _reroll_button.disabled else Color.WHITE
 	_refresh_buy_mulligan_controls(run)
 
 

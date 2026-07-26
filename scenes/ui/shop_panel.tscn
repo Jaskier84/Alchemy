@@ -107,7 +107,7 @@ theme_override_colors/font_outline_color = Color(0.08, 0.05, 0.02, 1)
 theme_override_constants/outline_size = 4
 theme_override_fonts/font = ExtResource("12_font")
 theme_override_font_sizes/font_size = 22
-text = "A Small Boom Berry has been added to your bag"
+text = "A Cherry Bomb has been added to your bag"
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
@@ -168,44 +168,34 @@ offset_bottom = 62.0
 
 [node name="OfferCards" type="Control" parent="." unique_id=920444359]
 layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 57.999985
-offset_top = 174.0
-offset_right = -102.0
-offset_bottom = -126.0
-grow_horizontal = 2
-grow_vertical = 2
-scale = Vector2(0.45206344, 0.45206344)
+anchors_preset = 0
+offset_left = 48.0
+offset_top = 78.0
+offset_right = 1120.0
+offset_bottom = 520.0
+scale = Vector2(0.4, 0.4)
+mouse_filter = 2
 
 [node name="ShopOffer0Card" parent="OfferCards" unique_id=230238123 instance=ExtResource("4_card")]
 layout_mode = 0
-offset_left = -4.424123
-offset_top = -183.60252
-offset_right = 295.57587
-offset_bottom = 236.39748
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 300.0
+offset_bottom = 420.0
 
 [node name="ShopOffer1Card" parent="OfferCards" unique_id=683596987 instance=ExtResource("4_card")]
 layout_mode = 0
-offset_left = 431.3554
-offset_top = -183.60251
-offset_right = 731.3554
-offset_bottom = 236.39749
+offset_left = 340.0
+offset_top = 0.0
+offset_right = 640.0
+offset_bottom = 420.0
 
 [node name="ShopOffer2Card" parent="OfferCards" unique_id=534567053 instance=ExtResource("4_card")]
 layout_mode = 0
-offset_left = 11.060431
-offset_top = 380.47763
-offset_right = 311.06042
-offset_bottom = 800.47766
-
-[node name="ShopOffer3Card" parent="OfferCards" unique_id=400897871 instance=ExtResource("4_card")]
-layout_mode = 0
-offset_left = 446.84
-offset_top = 378.26553
-offset_right = 746.84
-offset_bottom = 798.2655
+offset_left = 680.0
+offset_top = 0.0
+offset_right = 980.0
+offset_bottom = 420.0
 
 [node name="LeaveShopButton" parent="." unique_id=65643540 instance=ExtResource("2_button")]
 custom_minimum_size = Vector2(505, 260)
@@ -225,21 +215,7 @@ scale = Vector2(0.37148014, 0.37148014)
 pivot_offset = Vector2(252.5, 130)
 label_text = "Done"
 
-[node name="RerollButton" parent="." unique_id=1964979746 instance=ExtResource("10_reroll_button")]
-z_index = 5
-offset_left = 516.0
-offset_top = 155.0
-offset_right = 604.0
-offset_bottom = 243.0
 
-[node name="RerollCost" parent="." unique_id=1707572620 instance=ExtResource("11_reroll_cost")]
-z_index = 5
-layout_mode = 0
-anchors_preset = 0
-offset_left = 586.0
-offset_top = 176.0
-offset_right = 658.0
-offset_bottom = 220.0
 
 [node name="BuyMulliganCost" type="Control" parent="." unique_id=1523793024]
 z_index = 5

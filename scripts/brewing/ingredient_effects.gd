@@ -202,7 +202,8 @@ static func apply(
 		GROWTH_POTION_ID:
 			result.growth_potion_doubles = GROWTH_POTION_DOUBLE_COUNT
 		SAGE_ID:
-			result.free_shop_rerolls = 1
+			# Passive-only: sells for full price (see sell_value).
+			pass
 		EYE_OF_ENDER_ID:
 			result.extra_mulligans = 1
 		_:
@@ -309,6 +310,26 @@ static func explosion_limit_bonus_for_played_ingredient(
 
 static func is_boom_berry_id(ingredient_id: String) -> bool:
 	return ingredient_id.begins_with("boom_berry")
+
+
+## Gold returned when selling from the shop bag. Boom berries cannot be sold.
+static func sell_value(ingredient: IngredientData) -> int:
+	if ingredient == null or is_boom_berry_id(ingredient.id):
+		return 0
+	# Sage (and any future full-price sell tags) return shop_cost; others half, floored.
+	if sells_for_full_price(ingredient):
+		return maxi(0, ingredient.shop_cost)
+	return maxi(0, ingredient.shop_cost / 2)
+
+
+static func sells_for_full_price(ingredient: IngredientData) -> bool:
+	if ingredient == null:
+		return false
+	return ingredient.id == SAGE_ID
+
+
+static func can_sell_in_shop(ingredient: IngredientData) -> bool:
+	return ingredient != null and not is_boom_berry_id(ingredient.id)
 
 
 static func resolve_hand_play_cobbler(

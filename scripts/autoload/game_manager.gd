@@ -531,6 +531,18 @@ func try_purchase_offer(index: int) -> bool:
 	return purchased
 
 
+## Shop bag sell. Returns gold gained (>= 0) on success, or -1 on failure.
+func try_sell_ingredient(ingredient: IngredientData) -> int:
+	if run == null or current_phase != GamePhase.Phase.SHOP:
+		return -1
+	var gained := run.try_sell_ingredient(ingredient)
+	if gained < 0:
+		return -1
+	run_changed.emit()
+	_save_at_shop()
+	return gained
+
+
 func save_and_quit() -> void:
 	if current_phase not in [
 		GamePhase.Phase.BREWING,

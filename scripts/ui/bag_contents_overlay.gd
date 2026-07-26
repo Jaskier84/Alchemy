@@ -4,6 +4,7 @@ extends Control
 signal overlay_closed
 signal dev_hand_picker_completed(selection: Array)
 signal dev_trinket_picker_completed(trinket_ids: Array)
+signal ingredient_sold(gold_gained: int)
 
 enum DisplayMode { BAG_STACKS, CAULDRON_SEQUENCE, DEV_HAND_PICKER, DEV_TRINKET_PICKER }
 
@@ -47,6 +48,9 @@ var _hovered_ingredient: IngredientData
 var _hovered_slot: BagInventorySlot
 var _active_hover_rect: Rect2 = Rect2()
 var _preview_rest_position: Vector2 = Vector2.ZERO
+var _sell_enabled: bool = false
+var _selected_sell_ingredient: IngredientData
+var _sell_button: Button
 
 
 func _ready() -> void:
@@ -72,9 +76,36 @@ func _ready() -> void:
 			vbar.value_changed.connect(_on_scroll_changed)
 	if _done_button != null and not _done_button.pressed.is_connected(_on_done_button_pressed):
 		_done_button.pressed.connect(_on_done_button_pressed)
+	_ensure_sell_button()
 	_set_footer_visible(false)
 	set_process(false)
 	_hide_preview()
+
+
+func _ensure_sell_button() -> void:
+	if _footer == null:
+		return
+	if _sell_button != null and is_instance_valid(_sell_button):
+		return
+	_sell_button = get_node_or_null("Panel/Content/Footer/SellButton") as Button
+	if _sell_button == null:
+		_sell_button = Button.new()
+		_sell_button.name = "SellButton"
+		_sell_button.custom_minimum_size = Vector2(120, 40)
+		_sell_button.text = "Sell"
+		if _done_button != null:
+			_sell_button.add_theme_font_override(
+				"font",
+				_done_button.get_theme_font("font")
+			)
+			_sell_button.add_theme_font_size_override(
+				"font_size",
+				_done_button.get_theme_font_size("font_size")
+			)
+		_footer.add_child(_sell_button)
+	if not _sell_button.pressed.is_connected(_on_sell_button_pressed):
+		_sell_button.pressed.connect(_on_sell_button_pressed)
+	_sell_button.visible = false
 
 
 func _process(_delta: float) -> void:
@@ -175,11 +206,11 @@ func is_open() -> bool:
 	return visible
 
 
-func toggle(bag: BagModel) -> void:
+func toggle(bag: BagModel, sell_enabled: bool = false) -> void:
 	if visible and _mode == DisplayMode.BAG_STACKS:
 		hide_overlay()
 	else:
-		show_inventory(bag)
+		show_inventory(bag, sell_enabled)
 
 
 func toggle_cauldron(contents: Array) -> void:
@@ -189,27 +220,33 @@ func toggle_cauldron(contents: Array) -> void:
 		show_cauldron_contents(contents)
 
 
-func show_inventory(bag: BagModel) -> void:
+func show_inventory(bag: BagModel, sell_enabled: bool = false) -> void:
 	_mode = DisplayMode.BAG_STACKS
 	_bag = bag
 	_cauldron_contents.clear()
+	_sell_enabled = sell_enabled
+	_selected_sell_ingredient = null
 	_set_copy("Your Bag", "Your bag is empty.")
-	_set_footer_visible(false)
+	_configure_sell_footer()
 	_open()
 
 
 func show_cauldron_contents(contents: Array) -> void:
 	_mode = DisplayMode.CAULDRON_SEQUENCE
 	_bag = null
+	_sell_enabled = false
+	_selected_sell_ingredient = null
 	_cauldron_contents = contents.duplicate()
 	_set_copy("Your Cauldron", "Your cauldron is empty.")
-	_set_footer_visible(false)
+	_configure_sell_footer()
 	_open()
 
 
 func show_dev_hand_picker(ingredients: Array) -> void:
 	_mode = DisplayMode.DEV_HAND_PICKER
 	_bag = null
+	_sell_enabled = false
+	_selected_sell_ingredient = null
 	_cauldron_contents.clear()
 	_dev_catalog.clear()
 	_dev_selection_counts.clear()
@@ -223,6 +260,7 @@ func show_dev_hand_picker(ingredients: Array) -> void:
 			return a.display_name < b.display_name
 	)
 	_set_copy("Developer Hand", "")
+	_configure_sell_footer()
 	_set_footer_visible(true)
 	_update_dev_selection_ui()
 	_open()
@@ -231,6 +269,8 @@ func show_dev_hand_picker(ingredients: Array) -> void:
 func show_dev_trinket_picker(trinkets: Array) -> void:
 	_mode = DisplayMode.DEV_TRINKET_PICKER
 	_bag = null
+	_sell_enabled = false
+	_selected_sell_ingredient = null
 	_cauldron_contents.clear()
 	_dev_catalog.clear()
 	_dev_selection_counts.clear()
@@ -247,6 +287,7 @@ func show_dev_trinket_picker(trinkets: Array) -> void:
 			return a.display_name < b.display_name
 	)
 	_set_copy("Developer Trinkets", "")
+	_configure_sell_footer()
 	_set_footer_visible(true)
 	_update_dev_trinket_selection_ui()
 	_open()
@@ -263,6 +304,8 @@ func hide_overlay() -> void:
 	_hide_preview()
 	_clear_grid()
 	_hide_canvas_layers()
+	_sell_enabled = false
+	_selected_sell_ingredient = null
 	_set_footer_visible(false)
 	_dev_catalog.clear()
 	_dev_selection_counts.clear()
@@ -315,6 +358,13 @@ func _configure_mode_input() -> void:
 			_panel.z_index = 1
 			_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		set_process_input(true)
+	elif _mode == DisplayMode.BAG_STACKS and _sell_enabled:
+		# Sell selection is handled in _input (avoids class-bind signal type bugs).
+		if _input_blocker != null:
+			_input_blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+		if _panel != null:
+			_panel.z_index = 0
+		set_process_input(true)
 	else:
 		if _input_blocker != null:
 			_input_blocker.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -330,6 +380,8 @@ func _input(event: InputEvent) -> void:
 		_handle_dev_hand_input(event)
 	elif _mode == DisplayMode.DEV_TRINKET_PICKER:
 		_handle_dev_trinket_input(event)
+	elif _mode == DisplayMode.BAG_STACKS and _sell_enabled:
+		_handle_sell_input(event)
 
 
 func _handle_dev_hand_input(event: InputEvent) -> void:
@@ -373,6 +425,9 @@ func _handle_dev_trinket_input(event: InputEvent) -> void:
 func _is_dev_ui_control_at(mouse_pos: Vector2) -> bool:
 	if _done_button != null and _done_button.visible:
 		if _done_button.get_global_rect().has_point(mouse_pos):
+			return true
+	if _sell_button != null and _sell_button.visible:
+		if _sell_button.get_global_rect().has_point(mouse_pos):
 			return true
 	if _scroll != null:
 		var vbar := _scroll.get_v_scroll_bar()
@@ -441,12 +496,35 @@ func _rebuild_bag_grid() -> void:
 	var has_entries := not entries.is_empty()
 	_set_scroll_visible(has_entries, not has_entries)
 
+	var selected_still_present := false
 	for entry in entries:
 		var ingredient: IngredientData = entry.get("ingredient")
 		var count: int = int(entry.get("count", 0))
 		if ingredient == null or count <= 0:
 			continue
-		_add_slot(ingredient, count, true)
+		var slot := _add_slot(ingredient, count, true)
+		if slot == null:
+			continue
+		if _sell_enabled:
+			var sellable := IngredientEffects.can_sell_in_shop(ingredient)
+			var value := IngredientEffects.sell_value(ingredient) if sellable else 0
+			slot.set_sell_value_display(value, sellable)
+			# Selection is handled in overlay _input; slots stay non-interactive so
+			# hover previews keep working without signal bind type errors.
+			slot.set_interactive(false)
+			var is_selected := (
+				_selected_sell_ingredient != null
+				and _selected_sell_ingredient.id == ingredient.id
+			)
+			slot.set_selected(is_selected)
+			if is_selected:
+				selected_still_present = true
+		else:
+			slot.set_sell_value_display(0, false)
+			slot.set_selected(false)
+	if _sell_enabled and not selected_still_present:
+		_selected_sell_ingredient = null
+	_update_sell_footer_state()
 
 
 func _rebuild_cauldron_grid() -> void:
@@ -498,15 +576,16 @@ func _add_slot(
 	count: int,
 	show_count: bool,
 	interactive: bool = false
-) -> void:
+) -> BagInventorySlot:
 	var slot := _SLOT_SCENE.instantiate() as BagInventorySlot
 	if slot == null:
-		return
+		return null
 	_grid.add_child(slot)
 	slot.bind_entry(ingredient, count, show_count)
 	slot.set_interactive(false)
 	if interactive:
 		_dev_slot_by_id[ingredient.id] = slot
+	return slot
 
 
 func _add_trinket_slot(trinket: TrinketData, selected: bool) -> void:
@@ -586,6 +665,94 @@ func _set_footer_visible(visible_footer: bool) -> void:
 		_footer.visible = visible_footer
 
 
+func _configure_sell_footer() -> void:
+	_ensure_sell_button()
+	var is_dev := _mode in [DisplayMode.DEV_HAND_PICKER, DisplayMode.DEV_TRINKET_PICKER]
+	if _done_button != null:
+		_done_button.visible = is_dev
+	if _sell_button != null:
+		_sell_button.visible = _sell_enabled and not is_dev
+	if _sell_enabled and not is_dev:
+		_set_footer_visible(true)
+		_update_sell_footer_state()
+	elif not is_dev:
+		_set_footer_visible(false)
+
+
+func _update_sell_footer_state() -> void:
+	if not _sell_enabled:
+		return
+	var selected := _selected_sell_ingredient
+	var can_sell := selected != null and IngredientEffects.can_sell_in_shop(selected)
+	var value := IngredientEffects.sell_value(selected) if can_sell else 0
+	if _selection_label != null:
+		if can_sell:
+			_selection_label.text = "Sell %s for %d gold?" % [selected.display_name, value]
+		else:
+			_selection_label.text = "Select an ingredient to sell (explosive fruits can't be sold)."
+	if _sell_button != null:
+		_sell_button.disabled = not can_sell
+		_sell_button.text = "Sell" if value <= 0 else "Sell (%d)" % value
+
+
+func _handle_sell_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var mouse := event as InputEventMouseButton
+	if not mouse.pressed or mouse.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var mouse_pos := mouse.global_position
+	# Leave footer buttons / scrollbar alone.
+	if _is_dev_ui_control_at(mouse_pos):
+		return
+	# Clicks outside the bag panel are handled by the dim blocker (close).
+	if _panel != null and not _panel.get_global_rect().has_point(mouse_pos):
+		return
+	var ingredient := _find_dev_ingredient_at(mouse_pos)
+	if ingredient == null:
+		return
+	if not IngredientEffects.can_sell_in_shop(ingredient):
+		return
+	if (
+		_selected_sell_ingredient != null
+		and _selected_sell_ingredient.id == ingredient.id
+	):
+		_selected_sell_ingredient = null
+	else:
+		_selected_sell_ingredient = ingredient
+	_apply_sell_selection_visuals()
+	_update_sell_footer_state()
+	get_viewport().set_input_as_handled()
+
+
+func _apply_sell_selection_visuals() -> void:
+	if _grid == null:
+		return
+	for child in _grid.get_children():
+		var bag_slot := child as BagInventorySlot
+		if bag_slot == null:
+			continue
+		var ingredient := bag_slot.get_ingredient()
+		var selected := (
+			_selected_sell_ingredient != null
+			and ingredient != null
+			and ingredient.id == _selected_sell_ingredient.id
+		)
+		bag_slot.set_selected(selected)
+
+
+func _on_sell_button_pressed() -> void:
+	if not _sell_enabled or _selected_sell_ingredient == null:
+		return
+	var ingredient := _selected_sell_ingredient
+	var gained := GameManager.try_sell_ingredient(ingredient)
+	if gained < 0:
+		return
+	_selected_sell_ingredient = null
+	ingredient_sold.emit(gained)
+	_rebuild_grid()
+
+
 func _dev_selection_total() -> int:
 	var total := 0
 	for count in _dev_selection_counts.values():
@@ -604,7 +771,10 @@ func _update_dev_selection_ui() -> void:
 			else "Hand ready. Click Done."
 		)
 	if _done_button != null:
+		_done_button.visible = true
 		_done_button.disabled = total != DEV_HAND_PICK_COUNT
+	if _sell_button != null:
+		_sell_button.visible = false
 	for ingredient_id in _dev_slot_by_id.keys():
 		var slot: BagInventorySlot = _dev_slot_by_id[ingredient_id]
 		if slot == null:
@@ -673,7 +843,10 @@ func _update_dev_trinket_selection_ui() -> void:
 	if _selection_label != null:
 		_selection_label.text = "Click to select. Click again to deselect."
 	if _done_button != null:
+		_done_button.visible = true
 		_done_button.disabled = false
+	if _sell_button != null:
+		_sell_button.visible = false
 	for trinket_id in _dev_trinket_slot_by_id.keys():
 		var slot: BagInventorySlot = _dev_trinket_slot_by_id[trinket_id]
 		if slot == null:

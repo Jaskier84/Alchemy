@@ -593,8 +593,29 @@ func try_purchase_offer(index: int) -> bool:
 		return false
 	gold -= offer.price
 	bag.add_to_master_bag(offer.ingredient)
-	current_shop_offers[index] = null
+	# Buying refreshes the whole shop (same generation rules as a paid reroll).
+	current_shop_offers = _shop_service.generate_offers(
+		current_level,
+		gold,
+		GameConstants.SHOP_SLOT_COUNT,
+		owned_trinket_ids,
+		bag
+	)
 	return true
+
+
+## Sell one copy of an ingredient from the master bag. Returns gold gained, or -1 on failure.
+func try_sell_ingredient(ingredient: IngredientData) -> int:
+	if ingredient == null or bag == null:
+		return -1
+	if not IngredientEffects.can_sell_in_shop(ingredient):
+		return -1
+	if not bag.has_master_ingredient(ingredient.id):
+		return -1
+	var value := IngredientEffects.sell_value(ingredient)
+	bag.remove_one_chip_from_master(ingredient)
+	gold += value
+	return value
 
 
 func _pick_aura_for_brew() -> AuraData:
